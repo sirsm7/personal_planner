@@ -11,7 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Supabase dibuang, diganti Appwrite -->
+  <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
   <link rel="stylesheet" href="assets/css/styles.css"/>
@@ -223,10 +224,27 @@
   </div>
 
   <script>
-    // Supabase
-    const SUPABASE_URL = 'https://kgcswlhlydrtisikupua.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtnY3N3bGhseWRydGlzaWt1cHVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2MDQwNTEsImV4cCI6MjA3NjE4MDA1MX0.0qCny23q5T_qbPM2TLOpLqGCSjGrYIKLoEnjNCkhwMA';
-    const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession:false } });
+    // Appwrite (ganti Supabase)
+    const APPWRITE_ENDPOINT   = 'https://app.edidik.my/v1';
+    const APPWRITE_PROJECT_ID = '690e5d22002ee598e7b8';
+    const APPWRITE_DB_ID      = 'planner_db';
+    const APPWRITE_COL_AKTIVITI = 'aktiviti';
+
+    const client = new Appwrite.Client()
+      .setEndpoint(APPWRITE_ENDPOINT)
+      .setProject(APPWRITE_PROJECT_ID);
+
+    const account   = new Appwrite.Account(client);
+    const databases = new Appwrite.Databases(client);
+    const { ID, Query } = Appwrite;
+
+    async function ensureAnonSession(){
+      try{
+        await account.get();
+      }catch(e){
+        await account.createAnonymousSession();
+      }
+    }
 
     // Util tarikh
     const currentYear = new Date().getFullYear();
@@ -236,46 +254,31 @@
     const monthKey = (d)=> { const dt = new Date(d); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`; };
     const isCurrentYear = (d)=> new Date(d).getFullYear() === currentYear;
 
-    // ===== BARU: Fungsi untuk menukar teks URL kepada pautan =====
-    /**
-     * Menukar URL dalam teks menjadi pautan HTML yang boleh diklik.
-     * @param {string | null | undefined} text Teks input
-     * @returns {string} Teks dengan HTML pautan
-     */
     function linkifyText(text) {
       if (!text || text.trim() === '') {
-        return '-'; // Kembalikan 'default' jika tiada input
+        return '-';
       }
-      // Regex untuk mencari URL http, https
       const urlRegex = /(https?:\/\/[^\s<]+)/g;
-      
-      // Ganti URL dengan tag <a>
-      // 'word-break: break-all' ditambah untuk pastikan pautan panjang tidak 'overflow'
       return text.replace(urlRegex, (url) => {
         return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 hover:underline" style="word-break: break-all;">${url}</a>`;
       });
     }
-    // ===== TAMAT FUNGSI BARU =====
 
-    // Elemen
     const activityListEl = document.getElementById('activity-list');
     const monthJumpEl = document.getElementById('month-jump');
     const listMetaEl = document.getElementById('list-meta');
     const summaryBoxesEl = document.getElementById('summary-boxes');
     const heatmapGridEl = document.getElementById('heatmap-grid');
 
-    // State
     let cacheData = [];
     let monthIndex = [];
     const SELECTED_KEY_STORAGE = 'selectedMonth_list';
     const getSelectedMonth = ()=> sessionStorage.getItem(SELECTED_KEY_STORAGE) || monthKey(new Date());
     const setSelectedMonth = (val)=> sessionStorage.setItem(SELECTED_KEY_STORAGE, val);
 
-    // Cetak sentiasa tab Senarai
     document.getElementById('print-btn').addEventListener('click', ()=> window.print());
     window.addEventListener('beforeprint', ()=>{ renderActivities(getSelectedMonth()); });
 
-    // Indeks bulan (tahun semasa)
     function buildMonthIndex(rows){
       const map = new Map();
       rows.forEach(r=>{
@@ -356,7 +359,7 @@
           const card = document.createElement('div');
           card.className = 'bg-white p-4 rounded-lg shadow-sm border border-gray-200';
 
-        const tagColor = activity.medium_aktiviti === 'Bimbingan'
+          const tagColor = activity.medium_aktiviti === 'Bimbingan'
             ? 'bg-sky-100 text-sky-800'
             : 'bg-green-100 text-green-800';
           const tagText = activity.medium_aktiviti || 'Lain-lain';
@@ -371,7 +374,6 @@
               </button>
             </div>` : ``;
 
-          // ===== DIUBAH SUAI: Menggunakan linkifyText() =====
           card.innerHTML = `
             <div class="flex justify-between items-start">
               <div>
@@ -387,7 +389,6 @@
               ${actionsHTML}
             </div>
           `;
-          // ===== TAMAT UBAH SUAI =====
 
           section.appendChild(card);
         });
@@ -432,17 +433,56 @@
       }).join('');
     }
 
+    // PERUBAHAN UTAMA: loadActivities kini ambil semua rekod melalui pagination Appwrite
     async function loadActivities(){
-      const { data, error } = await supa.from('aktiviti').select('*').order('tarikh', { ascending:true });
-      if(error){ Swal.fire('Ralat', error.message || 'Gagal memuatkan data aktiviti.', 'error'); return; }
-      cacheData = Array.isArray(data) ? data : [];
+      try{
+        const allDocs = [];
+        let cursor = null;
+        const batchSize = 100;
 
-      monthIndex = buildMonthIndex(cacheData);
-      const selected = getSelectedMonth();
-      renderMonthOptions(selected);
-      renderActivities(selected);
+        while(true){
+          const queries = [Query.orderAsc('tarikh'), Query.limit(batchSize)];
+          if(cursor){
+            queries.push(Query.cursorAfter(cursor));
+          }
 
-      if(document.getElementById('tab-heatmap').classList.contains('active')) renderHeatmapYear();
+          const res = await databases.listDocuments(
+            APPWRITE_DB_ID,
+            APPWRITE_COL_AKTIVITI,
+            queries
+          );
+          const docs = res.documents || [];
+          allDocs.push(...docs);
+
+          if(docs.length < batchSize){
+            break;
+          }
+
+          cursor = docs[docs.length - 1].$id;
+        }
+
+        cacheData = allDocs.map(doc => ({
+          id: doc.$id,
+          tarikh: doc.tarikh,
+          tajuk: doc.tajuk,
+          masa: doc.masa,
+          tempat: doc.tempat,
+          medium_aktiviti: doc.medium_aktiviti,
+          nama_guru: doc.nama_guru,
+          impak_catatan: doc.impak_catatan,
+          tindak_susul: doc.tindak_susul
+        }));
+
+        monthIndex = buildMonthIndex(cacheData);
+        const selected = getSelectedMonth();
+        renderMonthOptions(selected);
+        renderActivities(selected);
+
+        if(document.getElementById('tab-heatmap').classList.contains('active')) renderHeatmapYear();
+      }catch(error){
+        console.error(error);
+        Swal.fire('Ralat', error.message || 'Gagal memuatkan data aktiviti.', 'error');
+      }
     }
 
     monthJumpEl?.addEventListener('change', (e)=>{
@@ -457,7 +497,6 @@
       }
     });
 
-    // Togol mod edit
     const EDIT_PASSWORD = 'pkgag';
     let editEnabled = sessionStorage.getItem('editEnabled') === 'true';
     const toggleBtn = document.getElementById('toggle-edit-btn');
@@ -484,12 +523,10 @@
       else if(pass!==undefined){ Swal.fire('Gagal','Kata laluan tidak sah.','error'); }
     });
 
-    // Sticky shadow
     const sh = document.getElementById('stickyHeader');
     const onScroll = ()=> sh.classList.toggle('scrolled', window.scrollY > 8);
     document.addEventListener('scroll', onScroll, { passive:true });
 
-    // Tabs
     function switchTab(tabName){
       document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
       document.querySelectorAll('.tab-button').forEach(b=>b.classList.remove('active'));
@@ -499,7 +536,6 @@
       if(tabName==='heatmap'){ renderHeatmapYear(); }
     }
 
-    // ===== DIPULIHKAN: Fungsi PADAM =====
     async function deleteActivity(id){
       if(!editEnabled){
         Swal.fire('Terkunci','Buka mod edit dahulu.','info');
@@ -517,17 +553,20 @@
       });
       if(!result.isConfirmed) return;
 
-      const { error } = await supa.from('aktiviti').delete().match({ id });
-      if(error){
-        Swal.fire('Gagal', error.message || 'Aktiviti gagal dipadam.', 'error');
-      }else{
+      try{
+        await databases.deleteDocument(
+          APPWRITE_DB_ID,
+          APPWRITE_COL_AKTIVITI,
+          id
+        );
         Swal.fire('Berjaya', 'Aktiviti telah dipadam.', 'success');
         loadActivities();
+      }catch(error){
+        console.error(error);
+        Swal.fire('Gagal', error.message || 'Aktiviti gagal dipadam.', 'error');
       }
     }
-    // ===== TAMAT: Fungsi PADAM =====
 
-    // ===== DIPULIHKAN: Simpan Aktiviti baharu =====
     const addForm = document.getElementById('add-activity-form');
     addForm?.addEventListener('submit', async (event)=>{
       event.preventDefault();
@@ -541,18 +580,22 @@
         impak_catatan:   document.getElementById('impak_catatan').value,
         tindak_susul:    document.getElementById('tindak_susul').value
       };
-      const { error } = await supa.from('aktiviti').insert([ payload ]);
-      if(error){
-        Swal.fire('Gagal', error.message || 'Sila pastikan semua medan diisi dengan betul.', 'error');
-      }else{
+      try{
+        await databases.createDocument(
+          APPWRITE_DB_ID,
+          APPWRITE_COL_AKTIVITI,
+          ID.unique(),
+          payload
+        );
         Swal.fire('Berjaya', 'Aktiviti baharu telah ditambah.', 'success');
         addForm.reset();
         loadActivities();
+      }catch(error){
+        console.error(error);
+        Swal.fire('Gagal', error.message || 'Sila pastikan semua medan diisi dengan betul.', 'error');
       }
     });
-    // ===== TAMAT: Simpan Aktiviti baharu =====
 
-    // Modal edit
     const editModal = document.getElementById('edit-modal');
     function openEditModal(activity){
       if(!editEnabled){ Swal.fire('Terkunci','Buka mod edit dahulu.','info'); return; }
@@ -586,24 +629,31 @@
         impak_catatan:   document.getElementById('edit-impak_catatan').value,
         tindak_susul:    document.getElementById('edit-tindak_susul').value
       };
-      const { error } = await supa.from('aktiviti').update(updated).eq('id', id);
-      if(error){ Swal.fire('Gagal', error.message || 'Aktiviti gagal dikemas kini.', 'error'); }
-      else{
+      try{
+        await databases.updateDocument(
+          APPWRITE_DB_ID,
+          APPWRITE_COL_AKTIVITI,
+          id,
+          updated
+        );
         Swal.fire('Berjaya', 'Aktiviti telah dikemas kini.', 'success');
         closeModal();
         renderActivities(getSelectedMonth());
         loadActivities();
+      }catch(error){
+        console.error(error);
+        Swal.fire('Gagal', error.message || 'Aktiviti gagal dikemas kini.', 'error');
       }
     });
 
-    // Tutup modal dengan klik overlay
     document.getElementById('edit-modal')?.addEventListener('click', (e)=>{
       if(e.target.id==='edit-modal') closeModal();
     });
 
-    document.addEventListener('DOMContentLoaded', ()=>{
-      setSelectedMonth(monthKey(new Date())); // buka laman → bulan semasa
-      loadActivities();
+    document.addEventListener('DOMContentLoaded', async ()=>{
+      await ensureAnonSession();
+      setSelectedMonth(monthKey(new Date()));
+      await loadActivities();
       refreshEditStateUI();
       onScroll();
     });
