@@ -11,8 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 
-  <!-- Supabase dibuang, diganti Appwrite -->
-  <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
   <link rel="stylesheet" href="assets/css/styles.css"/>
@@ -224,7 +223,16 @@
   </div>
 
   <script>
-    // Appwrite (ganti Supabase)
+    // Supabase (ganti Appwrite)
+    const SUPABASE_URL = 'https://umzekpsayclptmhgzotf.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVtemVrcHNheWNscHRtaGd6b3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjMwNTAsImV4cCI6MjA3ODIzOTA1MH0.FbV1ESJrckyJ4kT4hR3DKh01GHeHoCTEfU5kgPWmIRs';
+    
+    // **PEMBETULAN:** Namakan klien 'supabaseClient' untuk elak konflik
+    // Objek 'supabase' global datang dari skrip CDN
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Kod Appwrite (dibuang)
+    /*
     const APPWRITE_ENDPOINT   = 'https://app.edidik.my/v1';
     const APPWRITE_PROJECT_ID = '690e5d22002ee598e7b8';
     const APPWRITE_DB_ID      = 'planner_db';
@@ -245,8 +253,9 @@
         await account.createAnonymousSession();
       }
     }
+    */
 
-    // Util tarikh
+    // Util tarikh (kekal sama)
     const currentYear = new Date().getFullYear();
     const msMY = new Intl.DateTimeFormat('ms-MY', { year:'numeric', month:'long' });
     const monthLabelMY = new Intl.DateTimeFormat('ms-MY', { month:'long' });
@@ -433,36 +442,22 @@
       }).join('');
     }
 
-    // PERUBAHAN UTAMA: loadActivities kini ambil semua rekod melalui pagination Appwrite
+    // PERUBAHAN UTAMA: loadActivities kini ambil semua rekod dari Supabase
     async function loadActivities(){
       try{
-        const allDocs = [];
-        let cursor = null;
-        const batchSize = 100;
+        // Guna Supabase.from().select() untuk ambil semua rekod
+        // **PEMBETULAN:** Guna 'supabaseClient'
+        const { data: allDocs, error } = await supabaseClient
+          .from('aktiviti')
+          .select('*')
+          .order('tarikh', { ascending: true }); // 'order' ganti Appwrite Query.orderAsc
+        
+        if (error) throw error; // Pengendalian ralat Supabase
 
-        while(true){
-          const queries = [Query.orderAsc('tarikh'), Query.limit(batchSize)];
-          if(cursor){
-            queries.push(Query.cursorAfter(cursor));
-          }
-
-          const res = await databases.listDocuments(
-            APPWRITE_DB_ID,
-            APPWRITE_COL_AKTIVITI,
-            queries
-          );
-          const docs = res.documents || [];
-          allDocs.push(...docs);
-
-          if(docs.length < batchSize){
-            break;
-          }
-
-          cursor = docs[docs.length - 1].$id;
-        }
+        // Logik Appwrite pagination (while loop) dibuang
 
         cacheData = allDocs.map(doc => ({
-          id: doc.$id,
+          id: doc.id, // Guna 'id' (primary key) dari Supabase, BUKAN 'doc.$id'
           tarikh: doc.tarikh,
           tajuk: doc.tajuk,
           masa: doc.masa,
@@ -554,13 +549,17 @@
       if(!result.isConfirmed) return;
 
       try{
-        await databases.deleteDocument(
-          APPWRITE_DB_ID,
-          APPWRITE_COL_AKTIVITI,
-          id
-        );
+        // Ganti dengan Supabase delete
+        // **PEMBETULAN:** Guna 'supabaseClient'
+        const { error } = await supabaseClient
+          .from('aktiviti')
+          .delete()
+          .eq('id', id); // 'id' adalah nama kolum primary key
+          
+        if (error) throw error; // Pengendalian ralat Supabase
+
         Swal.fire('Berjaya', 'Aktiviti telah dipadam.', 'success');
-        loadActivities();
+        loadActivities(); // Muat semula data
       }catch(error){
         console.error(error);
         Swal.fire('Gagal', error.message || 'Aktiviti gagal dipadam.', 'error');
@@ -581,15 +580,17 @@
         tindak_susul:    document.getElementById('tindak_susul').value
       };
       try{
-        await databases.createDocument(
-          APPWRITE_DB_ID,
-          APPWRITE_COL_AKTIVITI,
-          ID.unique(),
-          payload
-        );
+        // Ganti dengan Supabase insert
+        // **PEMBETULAN:** Guna 'supabaseClient'
+        const { error } = await supabaseClient
+          .from('aktiviti')
+          .insert([payload]); // Supabase menjangkakan array of objects
+          
+        if (error) throw error; // Pengendalian ralat Supabase
+
         Swal.fire('Berjaya', 'Aktiviti baharu telah ditambah.', 'success');
         addForm.reset();
-        loadActivities();
+        loadActivities(); // Muat semula data
       }catch(error){
         console.error(error);
         Swal.fire('Gagal', error.message || 'Sila pastikan semua medan diisi dengan betul.', 'error');
@@ -630,16 +631,19 @@
         tindak_susul:    document.getElementById('edit-tindak_susul').value
       };
       try{
-        await databases.updateDocument(
-          APPWRITE_DB_ID,
-          APPWRITE_COL_AKTIVITI,
-          id,
-          updated
-        );
+        // Ganti dengan Supabase update
+        // **PEMBETULAN:** Guna 'supabaseClient'
+        const { error } = await supabaseClient
+          .from('aktiviti')
+          .update(updated)
+          .eq('id', id); // 'id' adalah nama kolum primary key
+
+        if (error) throw error; // Pengendalian ralat Supabase
+
         Swal.fire('Berjaya', 'Aktiviti telah dikemas kini.', 'success');
         closeModal();
-        renderActivities(getSelectedMonth());
-        loadActivities();
+        // renderActivities(getSelectedMonth()); // loadActivities() di bawah sudah memanggil ini
+        loadActivities(); // Muat semula semua data
       }catch(error){
         console.error(error);
         Swal.fire('Gagal', error.message || 'Aktiviti gagal dikemas kini.', 'error');
@@ -651,7 +655,7 @@
     });
 
     document.addEventListener('DOMContentLoaded', async ()=>{
-      await ensureAnonSession();
+      // await ensureAnonSession(); // Dibuang, tidak perlu untuk Supabase
       setSelectedMonth(monthKey(new Date()));
       await loadActivities();
       refreshEditStateUI();
