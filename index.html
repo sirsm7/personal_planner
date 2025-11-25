@@ -166,7 +166,7 @@
   <div id="edit-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
     <div class="relative top-20 mx-auto w-full max-w-lg">
       <div class="bg-white rounded-md shadow-lg border max-h/[80vh] max-h-[80vh] flex flex-col">
-        <h3 class="text-lg font-medium text-gray-900 text-center py-3 border-b">Kemas Kini Aktiviti</h3>
+        <h3 id="modal-title" class="text-lg font-medium text-gray-900 text-center py-3 border-b">Kemas Kini Aktiviti</h3>
 
         <div class="px-4 py-3 overflow-auto">
           <form id="edit-activity-form" class="space-y-4 text-left">
@@ -223,39 +223,12 @@
   </div>
 
   <script>
-    // Supabase (ganti Appwrite)
+    // Supabase Configuration
     const SUPABASE_URL = 'https://umzekpsayclptmhgzotf.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVtemVrcHNheWNscHRtaGd6b3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjMwNTAsImV4cCI6MjA3ODIzOTA1MH0.FbV1ESJrckyJ4kT4hR3DKh01GHeHoCTEfU5kgPWmIRs';
-    
-    // **PEMBETULAN:** Namakan klien 'supabaseClient' untuk elak konflik
-    // Objek 'supabase' global datang dari skrip CDN
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Kod Appwrite (dibuang)
-    /*
-    const APPWRITE_ENDPOINT   = 'https://app.edidik.my/v1';
-    const APPWRITE_PROJECT_ID = '690e5d22002ee598e7b8';
-    const APPWRITE_DB_ID      = 'planner_db';
-    const APPWRITE_COL_AKTIVITI = 'aktiviti';
-
-    const client = new Appwrite.Client()
-      .setEndpoint(APPWRITE_ENDPOINT)
-      .setProject(APPWRITE_PROJECT_ID);
-
-    const account   = new Appwrite.Account(client);
-    const databases = new Appwrite.Databases(client);
-    const { ID, Query } = Appwrite;
-
-    async function ensureAnonSession(){
-      try{
-        await account.get();
-      }catch(e){
-        await account.createAnonymousSession();
-      }
-    }
-    */
-
-    // Util tarikh (kekal sama)
+    // Utilities
     const currentYear = new Date().getFullYear();
     const msMY = new Intl.DateTimeFormat('ms-MY', { year:'numeric', month:'long' });
     const monthLabelMY = new Intl.DateTimeFormat('ms-MY', { month:'long' });
@@ -281,6 +254,10 @@
 
     let cacheData = [];
     let monthIndex = [];
+    
+    // Pembolehubah kawalan mod (Edit vs Salin)
+    let isCopyMode = false;
+
     const SELECTED_KEY_STORAGE = 'selectedMonth_list';
     const getSelectedMonth = ()=> sessionStorage.getItem(SELECTED_KEY_STORAGE) || monthKey(new Date());
     const setSelectedMonth = (val)=> sessionStorage.setItem(SELECTED_KEY_STORAGE, val);
@@ -373,11 +350,21 @@
             : 'bg-green-100 text-green-800';
           const tagText = activity.medium_aktiviti || 'Lain-lain';
 
+          // TAMBAHAN: Butang Salin (Ikon Ungu) di tengah
           const actionsHTML = editEnabled ? `
             <div class="flex items-center space-x-2 no-print">
+              
               <button onclick='openEditModal(${JSON.stringify(activity)})' class="text-blue-500 hover:text-blue-700 p-1" title="Edit" aria-label="Edit">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
               </button>
+
+              <button onclick='openCopyModal(${JSON.stringify(activity)})' class="text-purple-600 hover:text-purple-800 p-1" title="Salin" aria-label="Salin">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+
               <button onclick="deleteActivity('${activity.id}')" class="text-red-500 hover:text-red-700 p-1" title="Padam" aria-label="Padam">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
               </button>
@@ -442,22 +429,17 @@
       }).join('');
     }
 
-    // PERUBAHAN UTAMA: loadActivities kini ambil semua rekod dari Supabase
     async function loadActivities(){
       try{
-        // Guna Supabase.from().select() untuk ambil semua rekod
-        // **PEMBETULAN:** Guna 'supabaseClient'
         const { data: allDocs, error } = await supabaseClient
           .from('aktiviti')
           .select('*')
-          .order('tarikh', { ascending: true }); // 'order' ganti Appwrite Query.orderAsc
+          .order('tarikh', { ascending: true });
         
-        if (error) throw error; // Pengendalian ralat Supabase
-
-        // Logik Appwrite pagination (while loop) dibuang
+        if (error) throw error;
 
         cacheData = allDocs.map(doc => ({
-          id: doc.id, // Guna 'id' (primary key) dari Supabase, BUKAN 'doc.$id'
+          id: doc.id,
           tarikh: doc.tarikh,
           tajuk: doc.tajuk,
           masa: doc.masa,
@@ -549,17 +531,15 @@
       if(!result.isConfirmed) return;
 
       try{
-        // Ganti dengan Supabase delete
-        // **PEMBETULAN:** Guna 'supabaseClient'
         const { error } = await supabaseClient
           .from('aktiviti')
           .delete()
-          .eq('id', id); // 'id' adalah nama kolum primary key
+          .eq('id', id);
           
-        if (error) throw error; // Pengendalian ralat Supabase
+        if (error) throw error; 
 
         Swal.fire('Berjaya', 'Aktiviti telah dipadam.', 'success');
-        loadActivities(); // Muat semula data
+        loadActivities(); 
       }catch(error){
         console.error(error);
         Swal.fire('Gagal', error.message || 'Aktiviti gagal dipadam.', 'error');
@@ -580,26 +560,31 @@
         tindak_susul:    document.getElementById('tindak_susul').value
       };
       try{
-        // Ganti dengan Supabase insert
-        // **PEMBETULAN:** Guna 'supabaseClient'
         const { error } = await supabaseClient
           .from('aktiviti')
-          .insert([payload]); // Supabase menjangkakan array of objects
+          .insert([payload]);
           
-        if (error) throw error; // Pengendalian ralat Supabase
+        if (error) throw error; 
 
         Swal.fire('Berjaya', 'Aktiviti baharu telah ditambah.', 'success');
         addForm.reset();
-        loadActivities(); // Muat semula data
+        loadActivities(); 
       }catch(error){
         console.error(error);
         Swal.fire('Gagal', error.message || 'Sila pastikan semua medan diisi dengan betul.', 'error');
       }
     });
 
+    // -------------------------------------------------------------
+    // LOGIK MODAL: EDIT & SALIN
+    // -------------------------------------------------------------
+    
     const editModal = document.getElementById('edit-modal');
-    function openEditModal(activity){
-      if(!editEnabled){ Swal.fire('Terkunci','Buka mod edit dahulu.','info'); return; }
+    const modalTitleEl = document.getElementById('modal-title');
+    const saveChangesBtn = document.getElementById('save-changes-btn');
+
+    // Fungsi Pembantu: Isi Borang
+    function populateForm(activity) {
       document.getElementById('edit-activity-id').value = activity.id;
       document.getElementById('edit-medium_aktiviti').value = activity.medium_aktiviti || '';
       document.getElementById('edit-tajuk').value = activity.tajuk || '';
@@ -609,18 +594,48 @@
       document.getElementById('edit-nama_guru').value = activity.nama_guru || '';
       document.getElementById('edit-impak_catatan').value = activity.impak_catatan || '';
       document.getElementById('edit-tindak_susul').value = activity.tindak_susul || '';
+    }
+
+    function openEditModal(activity){
+      if(!editEnabled){ Swal.fire('Terkunci','Buka mod edit dahulu.','info'); return; }
+      
+      isCopyMode = false; // Set ke mod edit
+      modalTitleEl.textContent = 'Kemas Kini Aktiviti';
+      saveChangesBtn.textContent = 'Simpan Perubahan';
+      
+      populateForm(activity);
       editModal.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
     }
+
+    // FUNGSI BARU: Open Copy Modal
+    function openCopyModal(activity){
+      if(!editEnabled){ Swal.fire('Terkunci','Buka mod edit dahulu.','info'); return; }
+      
+      isCopyMode = true; // Set ke mod salin
+      modalTitleEl.textContent = 'Salin Aktiviti Baharu';
+      saveChangesBtn.textContent = 'Simpan Salinan';
+
+      populateForm(activity);
+      // ID tidak diperlukan untuk Insert, tapi kita biarkan form diisi supaya UX konsisten.
+      // Semasa save nanti, kita akan ignore ID ini jika isCopyMode = true.
+      
+      editModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
     function closeModal(){
       editModal.classList.add('hidden');
       document.body.style.overflow = '';
     }
     document.getElementById('close-modal-btn')?.addEventListener('click', closeModal);
-    document.getElementById('save-changes-btn')?.addEventListener('click', async ()=>{
+
+    // LOGIK BUTANG SIMPAN YANG DIKEMASKINI
+    saveChangesBtn?.addEventListener('click', async ()=>{
       if(!editEnabled){ Swal.fire('Terkunci','Buka mod edit dahulu.','info'); return; }
+
       const id = document.getElementById('edit-activity-id').value;
-      const updated = {
+      const payload = {
         medium_aktiviti: document.getElementById('edit-medium_aktiviti').value,
         tajuk:           document.getElementById('edit-tajuk').value,
         tarikh:          document.getElementById('edit-tarikh').value,
@@ -630,23 +645,33 @@
         impak_catatan:   document.getElementById('edit-impak_catatan').value,
         tindak_susul:    document.getElementById('edit-tindak_susul').value
       };
-      try{
-        // Ganti dengan Supabase update
-        // **PEMBETULAN:** Guna 'supabaseClient'
-        const { error } = await supabaseClient
-          .from('aktiviti')
-          .update(updated)
-          .eq('id', id); // 'id' adalah nama kolum primary key
 
-        if (error) throw error; // Pengendalian ralat Supabase
+      try {
+        if (isCopyMode) {
+          // --- LOGIK SALIN (INSERT) ---
+          const { error } = await supabaseClient
+            .from('aktiviti')
+            .insert([payload]); // Insert data baharu (ID akan auto-generate)
 
-        Swal.fire('Berjaya', 'Aktiviti telah dikemas kini.', 'success');
+          if (error) throw error;
+          Swal.fire('Berjaya', 'Salinan aktiviti telah ditambah.', 'success');
+
+        } else {
+          // --- LOGIK EDIT (UPDATE) ---
+          const { error } = await supabaseClient
+            .from('aktiviti')
+            .update(payload)
+            .eq('id', id); // Update data sedia ada berdasarkan ID
+
+          if (error) throw error;
+          Swal.fire('Berjaya', 'Aktiviti telah dikemas kini.', 'success');
+        }
+
         closeModal();
-        // renderActivities(getSelectedMonth()); // loadActivities() di bawah sudah memanggil ini
-        loadActivities(); // Muat semula semua data
-      }catch(error){
+        loadActivities(); // Muat semula senarai
+      } catch(error) {
         console.error(error);
-        Swal.fire('Gagal', error.message || 'Aktiviti gagal dikemas kini.', 'error');
+        Swal.fire('Gagal', error.message || 'Operasi gagal.', 'error');
       }
     });
 
@@ -655,7 +680,6 @@
     });
 
     document.addEventListener('DOMContentLoaded', async ()=>{
-      // await ensureAnonSession(); // Dibuang, tidak perlu untuk Supabase
       setSelectedMonth(monthKey(new Date()));
       await loadActivities();
       refreshEditStateUI();
