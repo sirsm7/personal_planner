@@ -312,10 +312,12 @@
       const isAktivitiActive = currentTypeFilter === 'Aktiviti';
 
       // Styles based on active state
+      // BIMBINGAN = HIJAU
       const bimbinganClass = isBimbinganActive 
         ? "ring-2 ring-green-500 ring-offset-2 bg-green-100 border-green-300" 
         : "bg-green-50 border-green-200 hover:bg-green-100";
-        
+      
+      // AKTIVITI = BIRU
       const aktivitiClass = isAktivitiActive 
         ? "ring-2 ring-blue-500 ring-offset-2 bg-blue-100 border-blue-300" 
         : "bg-blue-50 border-blue-200 hover:bg-blue-100";
@@ -402,9 +404,11 @@
           const card = document.createElement('div');
           card.className = 'bg-white p-4 rounded-lg shadow-sm border border-gray-200';
 
+          // --- FIX WARNA DISINI ---
+          // Bimbingan = Hijau, Aktiviti = Biru
           const tagColor = activity.medium_aktiviti === 'Bimbingan'
-            ? 'bg-sky-100 text-sky-800'
-            : 'bg-green-100 text-green-800';
+            ? 'bg-green-100 text-green-800'
+            : 'bg-blue-100 text-blue-800';
           const tagText = activity.medium_aktiviti || 'Lain-lain';
 
           const actionsHTML = editEnabled ? `
