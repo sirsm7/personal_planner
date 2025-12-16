@@ -20,6 +20,8 @@
     .summary-box { transition: all 0.2s ease-in-out; }
     .summary-box:hover { transform: translateY(-2px); }
     .summary-box:active { transform: scale(0.98); }
+    /* Pastikan dropdown nampak standard */
+    select:disabled { background-color: #f3f4f6; cursor: not-allowed; opacity: 0.7; }
   </style>
 </head>
 <body class="bg-gray-50">
@@ -124,22 +126,34 @@
         </div>
 
         <div id="tab-list" class="tab-content">
-          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-            <div>
-              <label for="month-jump" class="block text-sm font-medium text-gray-700">Lompat ke Bulan (Tahun Semasa)</label>
-              <select id="month-jump" class="mt-1 block w-64 p-2 border border-gray-300 rounded-md shadow-sm no-print">
-                <option value="__ALL__">Semua Bulan</option>
-              </select>
+          <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
+            
+            <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+              <div>
+                <label for="month-jump" class="block text-sm font-medium text-gray-700">Pilih Bulan</label>
+                <select id="month-jump" class="mt-1 block w-full md:w-56 p-2 border border-gray-300 rounded-md shadow-sm no-print">
+                  <option value="__ALL__">Semua Bulan</option>
+                </select>
+              </div>
+              
+              <div>
+                <label for="day-jump" class="block text-sm font-medium text-gray-700">Pilih Hari</label>
+                <select id="day-jump" disabled class="mt-1 block w-full md:w-32 p-2 border border-gray-300 rounded-md shadow-sm no-print text-gray-700">
+                  <option value="__ALL__">Semua Hari</option>
+                  </select>
+              </div>
             </div>
 
             <div class="flex items-center gap-3 no-print">
-              <p id="list-meta" class="text-sm text-gray-500"></p>
+              <p id="list-meta" class="text-sm text-gray-500 hidden md:block"></p>
               <button id="toggle-edit-btn" type="button"
-                class="px-3 py-2 rounded-md border text-sm font-medium bg-white hover:bg-gray-50">
+                class="px-3 py-2 rounded-md border text-sm font-medium bg-white hover:bg-gray-50 whitespace-nowrap">
                 Mod Edit: <span id="edit-state-label">Terkunci</span>
               </button>
             </div>
           </div>
+          
+          <p id="list-meta-mobile" class="text-sm text-gray-500 mb-2 md:hidden"></p>
 
           <div id="summary-boxes" class="grid grid-cols-2 gap-3 mb-4"></div>
 
@@ -254,7 +268,9 @@
 
     const activityListEl = document.getElementById('activity-list');
     const monthJumpEl = document.getElementById('month-jump');
+    const dayJumpEl = document.getElementById('day-jump'); // Dropdown Hari
     const listMetaEl = document.getElementById('list-meta');
+    const listMetaMobileEl = document.getElementById('list-meta-mobile'); 
     const summaryBoxesEl = document.getElementById('summary-boxes');
     const heatmapGridEl = document.getElementById('heatmap-grid');
 
@@ -262,7 +278,7 @@
     let monthIndex = [];
     let isCopyMode = false;
     
-    // FILTER STATE: __ALL__, Bimbingan, Aktiviti
+    // FILTER STATE
     let currentTypeFilter = '__ALL__';
 
     const SELECTED_KEY_STORAGE = 'selectedMonth_list';
@@ -270,7 +286,7 @@
     const setSelectedMonth = (val)=> sessionStorage.setItem(SELECTED_KEY_STORAGE, val);
 
     document.getElementById('print-btn').addEventListener('click', ()=> window.print());
-    window.addEventListener('beforeprint', ()=>{ renderActivities(getSelectedMonth()); });
+    window.addEventListener('beforeprint', ()=>{ renderActivities(); });
 
     function buildMonthIndex(rows){
       const map = new Map();
@@ -289,40 +305,61 @@
       monthJumpEl.innerHTML =
         `<option value="__ALL__">Semua Bulan</option>` +
         monthIndex.map(mi=>`<option value="${mi.key}">${mi.label} (${mi.count})</option>`).join('');
+      
       const keys = new Set(['__ALL__', ...monthIndex.map(m=>m.key)]);
       monthJumpEl.value = keys.has(selectedKey) ? selectedKey : '__ALL__';
+      
+      // Kemas kini dropdown hari berdasarkan bulan yang dipilih
+      updateDayOptions(monthJumpEl.value);
     }
 
-    // FUNCTION TO HANDLE FILTER CLICK
+    // Fungsi Baru: Jana Nombor Hari 1-31 dalam Dropdown
+    function updateDayOptions(selectedMonthKey) {
+        dayJumpEl.innerHTML = `<option value="__ALL__">Semua Hari</option>`;
+
+        if (selectedMonthKey === '__ALL__') {
+            dayJumpEl.disabled = true;
+            dayJumpEl.value = '__ALL__';
+            return;
+        }
+
+        // Aktifkan dropdown
+        dayJumpEl.disabled = false;
+
+        // Dapatkan jumlah hari dalam bulan tersebut
+        const [year, month] = selectedMonthKey.split('-');
+        const daysInMonth = new Date(year, month, 0).getDate(); // Trick untuk dapat hari terakhir bulan
+
+        for (let i = 1; i <= daysInMonth; i++) {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = i; // Papar nombor sahaja
+            dayJumpEl.appendChild(opt);
+        }
+    }
+
+    // FUNCTION TO HANDLE FILTER CLICK (Bimbingan/Aktiviti)
     function setTypeFilter(type) {
-        // Toggle: Jika klik jenis yang sama, reset ke ALL. Jika tidak, set ke jenis baru.
         if (currentTypeFilter === type) {
             currentTypeFilter = '__ALL__';
         } else {
             currentTypeFilter = type;
         }
-        renderActivities(getSelectedMonth());
+        renderActivities();
     }
 
-    function renderSummary(totalBimbingan, totalAktiviti, filterKey){
-      const scope = (filterKey==='__ALL__') ? 'Semua Bulan (Tahun Semasa)' : msMY.format(new Date(`${filterKey}-01T00:00:00`));
-      
-      // Determine active states for styling
+    function renderSummary(totalBimbingan, totalAktiviti, scopeLabel){
       const isBimbinganActive = currentTypeFilter === 'Bimbingan';
       const isAktivitiActive = currentTypeFilter === 'Aktiviti';
 
-      // Styles based on active state
-      // BIMBINGAN = HIJAU
       const bimbinganClass = isBimbinganActive 
         ? "ring-2 ring-green-500 ring-offset-2 bg-green-100 border-green-300" 
         : "bg-green-50 border-green-200 hover:bg-green-100";
       
-      // AKTIVITI = BIRU
       const aktivitiClass = isAktivitiActive 
         ? "ring-2 ring-blue-500 ring-offset-2 bg-blue-100 border-blue-300" 
         : "bg-blue-50 border-blue-200 hover:bg-blue-100";
 
-      // Icon for filtering
       const filterIcon = `<svg class="w-4 h-4 inline-block ml-1 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>`;
 
       summaryBoxesEl.innerHTML = `
@@ -331,7 +368,7 @@
             <div class="text-sm text-green-700 font-semibold">Bimbingan ${isBimbinganActive ? '✓' : ''}</div>
             ${isBimbinganActive ? '' : filterIcon}
           </div>
-          <div class="text-xs text-green-600 mb-1">${scope}</div>
+          <div class="text-xs text-green-600 mb-1">${scopeLabel}</div>
           <div class="mt-1 text-4xl font-extrabold text-green-800">${totalBimbingan}</div>
         </div>
         
@@ -340,42 +377,83 @@
              <div class="text-sm text-blue-700 font-semibold">Aktiviti ${isAktivitiActive ? '✓' : ''}</div>
              ${isAktivitiActive ? '' : filterIcon}
           </div>
-          <div class="text-xs text-blue-600 mb-1">${scope}</div>
+          <div class="text-xs text-blue-600 mb-1">${scopeLabel}</div>
           <div class="mt-1 text-4xl font-extrabold text-blue-800">${totalAktiviti}</div>
         </div>
       `;
     }
 
-    function renderActivities(filterKey='__ALL__'){
+    function renderActivities(){
       activityListEl.innerHTML = '';
 
-      const base = cacheData.filter(a=> isCurrentYear(a.tarikh));
-      
-      // 1. Filter by Month first
-      let filtered = base.filter(a => filterKey==='__ALL__' ? true : monthKey(a.tarikh)===filterKey);
+      // 1. Ambil nilai filter semasa
+      const monthFilter = monthJumpEl.value; // __ALL__ atau YYYY-MM
+      const dayFilter = dayJumpEl.value;     // __ALL__ atau nombor hari (1-31)
 
-      // Get totals BEFORE filtering by type (so the boxes always show total counts for the month)
+      const base = cacheData.filter(a=> isCurrentYear(a.tarikh));
+      let filtered = [];
+
+      // 2. Tapis ikut BULAN
+      if(monthFilter === '__ALL__') {
+          filtered = base;
+      } else {
+          filtered = base.filter(a => monthKey(a.tarikh) === monthFilter);
+      }
+
+      // 3. Tapis ikut HARI (Jika hari dipilih)
+      let isSpecificDay = false;
+      if (monthFilter !== '__ALL__' && dayFilter !== '__ALL__') {
+          isSpecificDay = true;
+          // Gunakan getDate() untuk perbandingan yang selamat (nombor vs nombor)
+          filtered = filtered.filter(a => {
+              const d = new Date(a.tarikh);
+              return d.getDate() === parseInt(dayFilter); 
+          });
+      }
+
+      // Get totals BEFORE type filtering
       const totalBimbingan = filtered.filter(x=>x.medium_aktiviti==='Bimbingan').length;
       const totalAktiviti  = filtered.filter(x=>x.medium_aktiviti==='Aktiviti').length;
       
-      renderSummary(totalBimbingan, totalAktiviti, filterKey);
+      // Determine Scope Label for Summary Box
+      let scopeLabel = '';
+      if(monthFilter === '__ALL__') scopeLabel = 'Semua Bulan';
+      else if(isSpecificDay) {
+         // Format tarikh penuh, cth: "16 Disember 2025"
+         const [y, m] = monthFilter.split('-');
+         const dateObj = new Date(y, m-1, dayFilter);
+         scopeLabel = dateObj.toLocaleDateString('ms-MY', { day:'numeric', month:'long', year:'numeric' });
+      } else {
+         scopeLabel = msMY.format(new Date(`${monthFilter}-01`));
+      }
 
-      // 2. Filter by Type (Bimbingan vs Aktiviti) if selected
+      renderSummary(totalBimbingan, totalAktiviti, scopeLabel);
+
+      // 4. Tapis ikut JENIS (Bimbingan/Aktiviti)
       if (currentTypeFilter !== '__ALL__') {
         filtered = filtered.filter(a => a.medium_aktiviti === currentTypeFilter);
       }
 
+      // 5. Paparan Jika Kosong
       if(filtered.length===0){
-        const msg = currentTypeFilter !== '__ALL__' 
-            ? `Tiada rekod jenis <b>${currentTypeFilter}</b> untuk pilihan bulan ini.` 
-            : `Tiada aktiviti untuk pilihan ini dalam tahun ${currentYear}.`;
-            
-        activityListEl.innerHTML = `<p class="text-gray-500 bg-gray-100 p-4 rounded text-center">${msg}</p>`;
+        let msg = `Tiada aktiviti untuk `;
+        if(isSpecificDay) msg += `tarikh <b>${scopeLabel}</b>`;
+        else if(monthFilter !== '__ALL__') msg += `bulan pilihan ini`;
+        else msg += `tahun ${currentYear}`;
+        
+        if (currentTypeFilter !== '__ALL__') msg += ` bagi kategori <b>${currentTypeFilter}</b>`;
+
+        activityListEl.innerHTML = `<p class="text-gray-500 bg-gray-100 p-4 rounded text-center">${msg}.</p>`;
         listMetaEl.innerHTML = '';
+        listMetaMobileEl.innerHTML = '';
         return;
       }
 
+      // 6. Grouping & Rendering
       const groups = new Map();
+      
+      // Kalau specific day, kita tak perlu group by month sangat, tapi untuk konsistensi kod
+      // kita group by month key as usual.
       filtered.forEach(a=>{
         const key = monthKey(a.tarikh);
         const arr = groups.get(key) || [];
@@ -390,9 +468,12 @@
         const items = groups.get(key).sort((a,b)=> new Date(a.tarikh) - new Date(b.tarikh));
         totalShown += items.length;
 
+        // Header bulan (hanya tunjuk jika bukan single specific day, optional)
+        // Tapi user suka structure, so kekalkan header bulan
         const label = msMY.format(new Date(`${key}-01T00:00:00`));
+
         const section = document.createElement('section');
-        section.id = `month-${key}`;
+        section.id = `group-${key}`;
         section.className = 'space-y-4';
 
         const h = document.createElement('h2');
@@ -404,8 +485,6 @@
           const card = document.createElement('div');
           card.className = 'bg-white p-4 rounded-lg shadow-sm border border-gray-200';
 
-          // --- FIX WARNA DISINI ---
-          // Bimbingan = Hijau, Aktiviti = Biru
           const tagColor = activity.medium_aktiviti === 'Bimbingan'
             ? 'bg-green-100 text-green-800'
             : 'bg-blue-100 text-blue-800';
@@ -449,10 +528,11 @@
         activityListEl.appendChild(section);
       });
 
-      const scope = (filterKey==='__ALL__') ? 'semua bulan tahun semasa' : msMY.format(new Date(`${filterKey}-01T00:00:00`));
       const filterLabel = currentTypeFilter !== '__ALL__' ? ` (Ditapis: ${currentTypeFilter})` : '';
+      const metaText = `Dipaparkan <b>${totalShown}</b> rekod untuk ${scopeLabel}${filterLabel}.`;
       
-      listMetaEl.innerHTML = `Dipaparkan <b>${totalShown}</b> rekod untuk ${scope}${filterLabel}.`;
+      listMetaEl.innerHTML = metaText;
+      listMetaMobileEl.innerHTML = metaText;
     }
 
     function renderHeatmapYear(){
@@ -512,7 +592,7 @@
         monthIndex = buildMonthIndex(cacheData);
         const selected = getSelectedMonth();
         renderMonthOptions(selected);
-        renderActivities(selected);
+        renderActivities(); // Render awal
 
         if(document.getElementById('tab-heatmap').classList.contains('active')) renderHeatmapYear();
       }catch(error){
@@ -521,16 +601,30 @@
       }
     }
 
+    // EVENT LISTENER: Tukar Bulan
     monthJumpEl?.addEventListener('change', (e)=>{
       const val = e.target.value;
       setSelectedMonth(val);
-      renderActivities(val);
+      
+      // Kemas kini dropdown hari (1-31)
+      updateDayOptions(val);
+      
+      // Render semula
+      renderActivities();
+      
       if(val !== '__ALL__'){
-        const sec = document.getElementById(`month-${val}`);
-        if(sec) sec.scrollIntoView({ behavior:'smooth', block:'start' });
+        setTimeout(() => {
+            const sec = document.getElementById(`group-${val}`);
+            if(sec) sec.scrollIntoView({ behavior:'smooth', block:'start' });
+        }, 100);
       } else {
         window.scrollTo({ top:0, behavior:'smooth' });
       }
+    });
+
+    // EVENT LISTENER: Tukar Hari
+    dayJumpEl?.addEventListener('change', (e)=>{
+      renderActivities();
     });
 
     const EDIT_PASSWORD = 'pkgag';
@@ -543,7 +637,7 @@
       toggleBtn.className = 'px-3 py-2 rounded-md border text-sm font-medium ' +
         (editEnabled ? 'bg-green-50 border-green-300 text-green-800 hover:bg-green-100'
                      : 'bg-white hover:bg-gray-50');
-      renderActivities(getSelectedMonth());
+      renderActivities();
     }
     toggleBtn?.addEventListener('click', async ()=>{
       if(editEnabled){ editEnabled=false; sessionStorage.setItem('editEnabled','false'); refreshEditStateUI(); return; }
@@ -642,7 +736,6 @@
     const modalTitleEl = document.getElementById('modal-title');
     const saveChangesBtn = document.getElementById('save-changes-btn');
 
-    // Fungsi Pembantu: Isi Borang
     function populateForm(activity) {
       document.getElementById('edit-activity-id').value = activity.id;
       document.getElementById('edit-medium_aktiviti').value = activity.medium_aktiviti || '';
@@ -658,7 +751,7 @@
     function openEditModal(activity){
       if(!editEnabled){ Swal.fire('Terkunci','Buka mod edit dahulu.','info'); return; }
       
-      isCopyMode = false; // Set ke mod edit
+      isCopyMode = false;
       modalTitleEl.textContent = 'Kemas Kini Aktiviti';
       saveChangesBtn.textContent = 'Simpan Perubahan';
       
@@ -670,7 +763,7 @@
     function openCopyModal(activity){
       if(!editEnabled){ Swal.fire('Terkunci','Buka mod edit dahulu.','info'); return; }
       
-      isCopyMode = true; // Set ke mod salin
+      isCopyMode = true;
       modalTitleEl.textContent = 'Salin Aktiviti Baharu';
       saveChangesBtn.textContent = 'Simpan Salinan';
 
