@@ -21,7 +21,7 @@
     .summary-box:hover { transform: translateY(-2px); }
     .summary-box:active { transform: scale(0.98); }
     /* Pastikan dropdown nampak standard */
-    select:disabled { background-color: #f3f4f6; cursor: not-allowed; opacity: 0.7; }
+    select:disabled { background-color: #f3f4f6; cursor: not-allowed; opacity: 0.7; color: #9ca3af; }
   </style>
 </head>
 <body class="bg-gray-50">
@@ -140,7 +140,7 @@
                 <label for="day-jump" class="block text-sm font-medium text-gray-700">Pilih Hari</label>
                 <select id="day-jump" disabled class="mt-1 block w-full md:w-32 p-2 border border-gray-300 rounded-md shadow-sm no-print text-gray-700">
                   <option value="__ALL__">Semua Hari</option>
-                  </select>
+                </select>
               </div>
             </div>
 
@@ -309,33 +309,57 @@
       const keys = new Set(['__ALL__', ...monthIndex.map(m=>m.key)]);
       monthJumpEl.value = keys.has(selectedKey) ? selectedKey : '__ALL__';
       
-      // Kemas kini dropdown hari berdasarkan bulan yang dipilih
+      // Initial call to populate days based on loaded data
       updateDayOptions(monthJumpEl.value);
     }
 
-    // Fungsi Baru: Jana Nombor Hari 1-31 dalam Dropdown
+    // --- FUNGSI BARU: JANA HARI BERDASARKAN DATA (RESPONSIVE) ---
     function updateDayOptions(selectedMonthKey) {
-        dayJumpEl.innerHTML = `<option value="__ALL__">Semua Hari</option>`;
+        // 1. Kosongkan dropdown dahulu
+        dayJumpEl.innerHTML = '';
 
+        // 2. Jika "Semua Bulan" dipilih, disable dropdown hari
         if (selectedMonthKey === '__ALL__') {
+            dayJumpEl.innerHTML = `<option value="__ALL__">Semua Hari</option>`;
             dayJumpEl.disabled = true;
             dayJumpEl.value = '__ALL__';
             return;
         }
 
+        // 3. Tapis data dari cacheData untuk bulan yang dipilih sahaja
+        const activitiesInMonth = cacheData.filter(a => monthKey(a.tarikh) === selectedMonthKey);
+
+        // 4. Jika tiada sebarang aktiviti dalam bulan itu
+        if (activitiesInMonth.length === 0) {
+            dayJumpEl.innerHTML = `<option value="">Tiada Rekod</option>`;
+            dayJumpEl.disabled = true;
+            return;
+        }
+
+        // 5. Dapatkan senarai hari unik (buang duplikasi)
+        const uniqueDays = [...new Set(activitiesInMonth.map(a => new Date(a.tarikh).getDate()))];
+        
+        // 6. Susun nombor hari (Ascending: 1, 5, 12...)
+        uniqueDays.sort((a, b) => a - b);
+
+        // 7. Masukkan pilihan ke dalam dropdown
+        // Option default
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '__ALL__';
+        defaultOpt.textContent = 'Semua Hari';
+        dayJumpEl.appendChild(defaultOpt);
+
+        // Loop hari yang wujud sahaja
+        uniqueDays.forEach(day => {
+            const opt = document.createElement('option');
+            opt.value = day;
+            opt.textContent = day; // Papar nombor sahaja
+            dayJumpEl.appendChild(opt);
+        });
+
         // Aktifkan dropdown
         dayJumpEl.disabled = false;
-
-        // Dapatkan jumlah hari dalam bulan tersebut
-        const [year, month] = selectedMonthKey.split('-');
-        const daysInMonth = new Date(year, month, 0).getDate(); // Trick untuk dapat hari terakhir bulan
-
-        for (let i = 1; i <= daysInMonth; i++) {
-            const opt = document.createElement('option');
-            opt.value = i;
-            opt.textContent = i; // Papar nombor sahaja
-            dayJumpEl.appendChild(opt);
-        }
+        dayJumpEl.value = '__ALL__'; // Reset ke 'Semua Hari' bila tukar bulan
     }
 
     // FUNCTION TO HANDLE FILTER CLICK (Bimbingan/Aktiviti)
@@ -388,7 +412,7 @@
 
       // 1. Ambil nilai filter semasa
       const monthFilter = monthJumpEl.value; // __ALL__ atau YYYY-MM
-      const dayFilter = dayJumpEl.value;     // __ALL__ atau nombor hari (1-31)
+      const dayFilter = dayJumpEl.value;     // __ALL__ atau nombor hari (contoh: '16')
 
       const base = cacheData.filter(a=> isCurrentYear(a.tarikh));
       let filtered = [];
@@ -402,7 +426,7 @@
 
       // 3. Tapis ikut HARI (Jika hari dipilih)
       let isSpecificDay = false;
-      if (monthFilter !== '__ALL__' && dayFilter !== '__ALL__') {
+      if (monthFilter !== '__ALL__' && dayFilter !== '__ALL__' && dayFilter !== '') {
           isSpecificDay = true;
           // Gunakan getDate() untuk perbandingan yang selamat (nombor vs nombor)
           filtered = filtered.filter(a => {
@@ -452,8 +476,6 @@
       // 6. Grouping & Rendering
       const groups = new Map();
       
-      // Kalau specific day, kita tak perlu group by month sangat, tapi untuk konsistensi kod
-      // kita group by month key as usual.
       filtered.forEach(a=>{
         const key = monthKey(a.tarikh);
         const arr = groups.get(key) || [];
@@ -468,8 +490,6 @@
         const items = groups.get(key).sort((a,b)=> new Date(a.tarikh) - new Date(b.tarikh));
         totalShown += items.length;
 
-        // Header bulan (hanya tunjuk jika bukan single specific day, optional)
-        // Tapi user suka structure, so kekalkan header bulan
         const label = msMY.format(new Date(`${key}-01T00:00:00`));
 
         const section = document.createElement('section');
@@ -606,10 +626,10 @@
       const val = e.target.value;
       setSelectedMonth(val);
       
-      // Kemas kini dropdown hari (1-31)
+      // AUTO UPDATE: Jana hari berdasarkan data bulan baru
       updateDayOptions(val);
       
-      // Render semula
+      // Render semula senarai
       renderActivities();
       
       if(val !== '__ALL__'){
