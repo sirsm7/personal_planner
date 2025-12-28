@@ -1,7 +1,9 @@
 // --- KONFIGURASI SUPABASE ---
 const SUPABASE_URL = 'https://umzekpsayclptmhgzotf.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVtemVrcHNheWNscHRtaGd6b3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjMwNTAsImV4cCI6MjA3ODIzOTA1MH0.FbV1ESJrckyJ4kT4hR3DKh01GHeHoCTEfU5kgPWmIRs';
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// PERUBAHAN UTAMA DI SINI: Tukar nama variable kepada 'supabaseClient'
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- STATE MANAGEMENT ---
 let allData = []; // Data mentah dari DB
@@ -26,24 +28,22 @@ const btnLogout = document.getElementById('btn-logout');
 const tabAddBtn = document.getElementById('tab-add-btn');
 
 // Listener untuk perubahan sesi
-supabase.auth.onAuthStateChange((event, session) => {
+// Guna supabaseClient, bukan supabase
+supabaseClient.auth.onAuthStateChange((event, session) => {
     currentUser = session?.user || null;
     updateAuthUI();
-    renderActivities(); // Render semula untuk tunjuk/sorok butang edit
+    renderActivities(); 
 });
 
 function updateAuthUI() {
     if (currentUser) {
-        // User logged in
         btnShowLogin.classList.add('hidden');
         btnLogout.classList.remove('hidden');
-        tabAddBtn.classList.remove('hidden'); // Tunjuk tab Tambah
+        tabAddBtn.classList.remove('hidden'); 
     } else {
-        // User guest
         btnShowLogin.classList.remove('hidden');
         btnLogout.classList.add('hidden');
-        tabAddBtn.classList.add('hidden'); // Sorok tab Tambah
-        // Jika sedang di tab Tambah, tendang ke tab Senarai
+        tabAddBtn.classList.add('hidden'); 
         if(document.getElementById('tab-add').classList.contains('active')){
             switchTab('list');
         }
@@ -56,7 +56,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-password').value;
     
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
     if (error) {
         Swal.fire('Gagal', 'Emel atau kata laluan salah.', 'error');
     } else {
@@ -68,7 +68,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 
 // Logout
 btnLogout.addEventListener('click', async () => {
-    await supabase.auth.signOut();
+    await supabaseClient.auth.signOut();
     Swal.fire('Log Keluar', 'Anda telah log keluar.', 'info');
 });
 
@@ -82,7 +82,6 @@ async function initApp() {
     await fetchData();
     setupYearDropdown();
     setupFilterListeners();
-    // Set default filters
     filterYear = yearsAvailable.length > 0 ? Math.max(...yearsAvailable) : new Date().getFullYear();
     document.getElementById('year-jump').value = filterYear;
     
@@ -93,9 +92,7 @@ async function initApp() {
 
 async function fetchData() {
     try {
-        // Ambil semua data. Untuk aplikasi kecil/sederhana, ini okay.
-        // Jika data > 5000 baris, perlu pagination.
-        let { data, error } = await supabase
+        let { data, error } = await supabaseClient
             .from('aktiviti')
             .select('*')
             .order('tarikh', { ascending: false });
@@ -103,11 +100,9 @@ async function fetchData() {
         if (error) throw error;
         allData = data || [];
 
-        // Cari tahun unik
         const yearsSet = new Set(allData.map(item => new Date(item.tarikh).getFullYear()));
-        yearsAvailable = Array.from(yearsSet).sort((a, b) => b - a); // Descending
+        yearsAvailable = Array.from(yearsSet).sort((a, b) => b - a); 
         
-        // Pastikan tahun semasa sentiasa ada dalam senarai drop down walaupun belum ada data
         const currentY = new Date().getFullYear();
         if(!yearsAvailable.includes(currentY)) {
             yearsAvailable.unshift(currentY);
@@ -128,7 +123,7 @@ function setupYearDropdown() {
 function setupFilterListeners() {
     document.getElementById('year-jump').addEventListener('change', (e) => {
         filterYear = parseInt(e.target.value);
-        filterMonth = '__ALL__'; // Reset bulan bila tukar tahun
+        filterMonth = '__ALL__'; 
         document.getElementById('month-jump').value = '__ALL__';
         updateMonthOptions();
         renderActivities();
@@ -137,7 +132,7 @@ function setupFilterListeners() {
 
     document.getElementById('month-jump').addEventListener('change', (e) => {
         filterMonth = e.target.value;
-        updateDayOptions(); // Kemaskini hari berdasarkan bulan baru
+        updateDayOptions(); 
         renderActivities();
     });
 
@@ -147,17 +142,12 @@ function setupFilterListeners() {
     });
 }
 
-// Kemas kini dropdown bulan (Reset bila tahun tukar, boleh di-optimize jika perlu)
 function updateMonthOptions() {
-    // Di sini kita kekalkan statik 12 bulan atau filter ikut data.
-    // Untuk UX konsisten, kita biar 12 bulan pilihan.
     const monthSelect = document.getElementById('month-jump');
-    // Kekalkan opsyen, cuma reset value
     monthSelect.value = '__ALL__';
     updateDayOptions();
 }
 
-// Kemas kini dropdown hari secara dinamik berdasarkan data tahun & bulan dipilih
 function updateDayOptions() {
     const daySelect = document.getElementById('day-jump');
     daySelect.innerHTML = '<option value="__ALL__">Semua Hari</option>';
@@ -168,7 +158,6 @@ function updateDayOptions() {
         return;
     }
 
-    // Filter data untuk dapatkan hari yang wujud sahaja
     const relevantData = allData.filter(item => {
         const d = new Date(item.tarikh);
         return d.getFullYear() === filterYear && getMonthKey(item.tarikh) === filterMonth;
@@ -188,7 +177,7 @@ function updateDayOptions() {
         });
         daySelect.disabled = false;
     }
-    filterDay = '__ALL__'; // Reset hari
+    filterDay = '__ALL__'; 
 }
 
 // --- 3. RENDERING (PAPARAN) ---
@@ -197,7 +186,6 @@ function renderActivities() {
     const listEl = document.getElementById('activity-list');
     listEl.innerHTML = '';
 
-    // 1. FILTERING
     let filtered = allData.filter(item => {
         const d = new Date(item.tarikh);
         const matchYear = d.getFullYear() === filterYear;
@@ -207,7 +195,6 @@ function renderActivities() {
         return matchYear && matchMonth && matchDay && matchType;
     });
 
-    // 2. SUMMARY COUNTS
     const countBim = filtered.filter(i => i.medium_aktiviti === 'Bimbingan').length;
     const countAkt = filtered.filter(i => i.medium_aktiviti === 'Aktiviti').length;
     renderSummary(countBim, countAkt);
@@ -219,15 +206,13 @@ function renderActivities() {
         return;
     }
 
-    // 3. GROUP BY MONTH (Visual Separation)
     const groups = {};
     filtered.forEach(item => {
-        const mKey = item.tarikh.substring(0, 7); // YYYY-MM
+        const mKey = item.tarikh.substring(0, 7); 
         if (!groups[mKey]) groups[mKey] = [];
         groups[mKey].push(item);
     });
 
-    // Sort Keys Descending (Latest month first)
     Object.keys(groups).sort().reverse().forEach(key => {
         const items = groups[key];
         const monthLabel = msMY.format(new Date(key + '-01'));
@@ -242,13 +227,14 @@ function renderActivities() {
             const isBimbingan = act.medium_aktiviti === 'Bimbingan';
             const badgeColor = isBimbingan ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
             
-            // Butang Action (Hanya jika Login)
             let actionButtons = '';
             if (currentUser) {
+                // escape single quotes
+                const jsonStr = JSON.stringify(act).replace(/'/g, "&#39;");
                 actionButtons = `
                 <div class="flex gap-2 mt-4 pt-3 border-t border-gray-100 no-print">
-                    <button onclick='openEditModal(${JSON.stringify(act).replace(/'/g, "&#39;")}, false)' class="text-sm text-blue-600 hover:text-blue-800 font-medium">Edit</button>
-                    <button onclick='openEditModal(${JSON.stringify(act).replace(/'/g, "&#39;")}, true)' class="text-sm text-purple-600 hover:text-purple-800 font-medium">Salin</button>
+                    <button onclick='openEditModal(${jsonStr}, false)' class="text-sm text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                    <button onclick='openEditModal(${jsonStr}, true)' class="text-sm text-purple-600 hover:text-purple-800 font-medium">Salin</button>
                     <button onclick="deleteActivity('${act.id}')" class="text-sm text-red-600 hover:text-red-800 font-medium ml-auto">Padam</button>
                 </div>
                 `;
@@ -269,9 +255,9 @@ function renderActivities() {
                 </div>
                 <div class="mt-3 text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
                     <p class="font-semibold text-xs text-gray-500 uppercase">Impak / Catatan</p>
-                    <p class="mb-2">${linkify(act.impak_catatan)}</p>
+                    <p class="mb-2" style="overflow-wrap:anywhere;">${linkify(act.impak_catatan)}</p>
                     <p class="font-semibold text-xs text-gray-500 uppercase">Tindak Susul</p>
-                    <p>${linkify(act.tindak_susul)}</p>
+                    <p style="overflow-wrap:anywhere;">${linkify(act.tindak_susul)}</p>
                 </div>
                 ${actionButtons}
             `;
@@ -308,7 +294,6 @@ function renderHeatmap() {
     const grid = document.getElementById('heatmap-grid');
     document.getElementById('heatmap-year-label').textContent = filterYear;
     
-    // Init array 12 bulan
     const months = Array.from({length: 12}, (_, i) => ({
         idx: i,
         name: new Date(2000, i, 1).toLocaleDateString('ms-MY', { month: 'long' }),
@@ -317,7 +302,6 @@ function renderHeatmap() {
         akt: 0
     }));
 
-    // Isi data berdasarkan TAHUN yang dipilih
     allData.forEach(item => {
         const d = new Date(item.tarikh);
         if (d.getFullYear() === filterYear) {
@@ -332,7 +316,7 @@ function renderHeatmap() {
 
     grid.innerHTML = months.map(m => {
         const opacity = m.count === 0 ? 0.05 : (m.count / maxVal);
-        const bgColor = `rgba(212, 175, 55, ${Math.max(0.05, opacity)})`; // Gold color base
+        const bgColor = `rgba(212, 175, 55, ${Math.max(0.05, opacity)})`; 
         
         return `
             <div class="rounded-xl p-3 border border-yellow-400/20" style="background-color: ${bgColor}">
@@ -354,12 +338,6 @@ document.getElementById('add-activity-form').addEventListener('submit', async (e
     e.preventDefault();
     if (!currentUser) return Swal.fire('Akses Ditolak', 'Sila log masuk dahulu.', 'warning');
 
-    const payload = getFormPayload('add-activity-form'); // Helper function bawah
-    // Override manual fields
-    payload.medium_aktiviti = document.getElementById('medium_aktiviti').value;
-    payload.tarikh = document.getElementById('tarikh').value;
-    // ... capture other IDs explicitly if helper not perfect or just map manually:
-    
     const finalPayload = {
         medium_aktiviti: document.getElementById('medium_aktiviti').value,
         tajuk: document.getElementById('tajuk').value,
@@ -371,13 +349,13 @@ document.getElementById('add-activity-form').addEventListener('submit', async (e
         tindak_susul: document.getElementById('tindak_susul').value
     };
 
-    const { error } = await supabase.from('aktiviti').insert([finalPayload]);
+    const { error } = await supabaseClient.from('aktiviti').insert([finalPayload]);
     if (error) {
         Swal.fire('Ralat', error.message, 'error');
     } else {
         Swal.fire('Berjaya', 'Aktiviti ditambah.', 'success');
         e.target.reset();
-        await initApp(); // Reload data
+        await initApp(); 
         switchTab('list');
     }
 });
@@ -390,7 +368,7 @@ async function deleteActivity(id) {
     });
     
     if (res.isConfirmed) {
-        const { error } = await supabase.from('aktiviti').delete().eq('id', id);
+        const { error } = await supabaseClient.from('aktiviti').delete().eq('id', id);
         if (error) Swal.fire('Gagal', error.message, 'error');
         else {
             Swal.fire('Berjaya', 'Data dipadam.', 'success');
@@ -410,7 +388,6 @@ window.openEditModal = (item, copyMode) => {
     title.innerText = copyMode ? 'Salin Aktiviti' : 'Kemas Kini Aktiviti';
     btn.innerText = copyMode ? 'Simpan Salinan' : 'Simpan Perubahan';
     
-    // Populate Form
     document.getElementById('edit-activity-id').value = item.id;
     document.getElementById('edit-medium_aktiviti').value = item.medium_aktiviti;
     document.getElementById('edit-tarikh').value = item.tarikh;
@@ -443,12 +420,10 @@ document.getElementById('save-changes-btn').addEventListener('click', async () =
 
     let error;
     if (isCopyMode) {
-        // Insert new
-        const { error: err } = await supabase.from('aktiviti').insert([payload]);
+        const { error: err } = await supabaseClient.from('aktiviti').insert([payload]);
         error = err;
     } else {
-        // Update existing
-        const { error: err } = await supabase.from('aktiviti').update(payload).eq('id', id);
+        const { error: err } = await supabaseClient.from('aktiviti').update(payload).eq('id', id);
         error = err;
     }
 
@@ -479,15 +454,12 @@ function linkify(text) {
     return text.replace(urlRegex, url => `<a href="${url}" target="_blank" class="text-blue-600 underline hover:text-blue-800 break-all">${url}</a>`);
 }
 
-// Print Handler
 document.getElementById('print-btn').addEventListener('click', () => window.print());
 
-// Scroll sticky header shadow
 window.addEventListener('scroll', () => {
     const h = document.getElementById('stickyHeader');
     if (window.scrollY > 10) h.classList.add('scrolled');
     else h.classList.remove('scrolled');
 });
 
-// Init
 document.addEventListener('DOMContentLoaded', initApp);
