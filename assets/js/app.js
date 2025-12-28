@@ -2,13 +2,13 @@
 const SUPABASE_URL = 'https://umzekpsayclptmhgzotf.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVtemVrcHNheWNscHRtaGd6b3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjMwNTAsImV4cCI6MjA3ODIzOTA1MH0.FbV1ESJrckyJ4kT4hR3DKh01GHeHoCTEfU5kgPWmIRs';
 
-// PERUBAHAN UTAMA DI SINI: Tukar nama variable kepada 'supabaseClient'
+// PEMBETULAN: Gunakan nama 'supabaseClient' untuk elak konflik dengan library CDN
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- STATE MANAGEMENT ---
-let allData = []; // Data mentah dari DB
-let yearsAvailable = []; // Senarai tahun yang wujud dalam data
-let currentUser = null; // Status login
+let allData = [];
+let yearsAvailable = [];
+let currentUser = null;
 
 // Filter State
 let filterYear = new Date().getFullYear();
@@ -21,60 +21,66 @@ const msMY = new Intl.DateTimeFormat('ms-MY', { month: 'long' });
 const fullDate = (d) => new Date(d).toLocaleDateString('ms-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const getMonthKey = (d) => { const dt = new Date(d); return `${String(dt.getMonth() + 1).padStart(2, '0')}`; };
 
-// --- 1. AUTHENTICATION (LOGIC LOGIN) ---
+// --- 1. AUTHENTICATION ---
 const authContainer = document.getElementById('auth-container');
 const btnShowLogin = document.getElementById('btn-show-login');
 const btnLogout = document.getElementById('btn-logout');
 const tabAddBtn = document.getElementById('tab-add-btn');
 
-// Listener untuk perubahan sesi
-// Guna supabaseClient, bukan supabase
+// Listener Session
 supabaseClient.auth.onAuthStateChange((event, session) => {
     currentUser = session?.user || null;
     updateAuthUI();
-    renderActivities(); 
+    renderActivities();
 });
 
 function updateAuthUI() {
     if (currentUser) {
-        btnShowLogin.classList.add('hidden');
-        btnLogout.classList.remove('hidden');
-        tabAddBtn.classList.remove('hidden'); 
+        if(btnShowLogin) btnShowLogin.classList.add('hidden');
+        if(btnLogout) btnLogout.classList.remove('hidden');
+        if(tabAddBtn) tabAddBtn.classList.remove('hidden');
     } else {
-        btnShowLogin.classList.remove('hidden');
-        btnLogout.classList.add('hidden');
-        tabAddBtn.classList.add('hidden'); 
-        if(document.getElementById('tab-add').classList.contains('active')){
+        if(btnShowLogin) btnShowLogin.classList.remove('hidden');
+        if(btnLogout) btnLogout.classList.add('hidden');
+        if(tabAddBtn) tabAddBtn.classList.add('hidden');
+        
+        // Jika user di tab add, tendang ke list
+        const tabAdd = document.getElementById('tab-add');
+        if(tabAdd && tabAdd.classList.contains('active')){
             switchTab('list');
         }
     }
 }
 
-// Login
-document.getElementById('login-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email = document.getElementById('login-email').value;
-    const pass = document.getElementById('login-password').value;
-    
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
-    if (error) {
-        Swal.fire('Gagal', 'Emel atau kata laluan salah.', 'error');
-    } else {
-        closeLoginModal();
-        Swal.fire('Berjaya', 'Selamat kembali!', 'success');
-        document.getElementById('login-form').reset();
-    }
-});
+// Login Action
+const loginForm = document.getElementById('login-form');
+if(loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('login-email').value;
+        const pass = document.getElementById('login-password').value;
+        
+        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
+        if (error) {
+            Swal.fire('Gagal', 'Emel atau kata laluan salah.', 'error');
+        } else {
+            closeLoginModal();
+            Swal.fire('Berjaya', 'Selamat kembali!', 'success');
+            loginForm.reset();
+        }
+    });
+}
 
-// Logout
-btnLogout.addEventListener('click', async () => {
-    await supabaseClient.auth.signOut();
-    Swal.fire('Log Keluar', 'Anda telah log keluar.', 'info');
-});
+// Logout Action
+if(btnLogout) {
+    btnLogout.addEventListener('click', async () => {
+        await supabaseClient.auth.signOut();
+        Swal.fire('Log Keluar', 'Anda telah log keluar.', 'info');
+    });
+}
 
 // Modal Login UI
-btnShowLogin.addEventListener('click', () => document.getElementById('login-modal').classList.remove('hidden'));
-function closeLoginModal() { document.getElementById('login-modal').classList.add('hidden'); }
+if(btnShowLogin) btnShowLogin.addEventListener('click', () => document.getElementById('login-modal').classList.remove('hidden'));
 
 // --- 2. DATA LOADING & FILTERING ---
 
@@ -82,8 +88,16 @@ async function initApp() {
     await fetchData();
     setupYearDropdown();
     setupFilterListeners();
-    filterYear = yearsAvailable.length > 0 ? Math.max(...yearsAvailable) : new Date().getFullYear();
-    document.getElementById('year-jump').value = filterYear;
+    
+    // Set default filter tahun terkini dalam data
+    if(yearsAvailable.length > 0) {
+        filterYear = Math.max(...yearsAvailable);
+    } else {
+        filterYear = new Date().getFullYear();
+    }
+    
+    const yearJump = document.getElementById('year-jump');
+    if(yearJump) yearJump.value = filterYear;
     
     updateMonthOptions(); 
     renderActivities();
@@ -111,45 +125,59 @@ async function fetchData() {
 
     } catch (err) {
         console.error(err);
-        Swal.fire('Ralat', 'Gagal memuatkan data.', 'error');
+        // Swal.fire('Ralat', 'Gagal memuatkan data.', 'error');
     }
 }
 
 function setupYearDropdown() {
     const yearSelect = document.getElementById('year-jump');
-    yearSelect.innerHTML = yearsAvailable.map(y => `<option value="${y}">${y}</option>`).join('');
+    if(yearSelect) yearSelect.innerHTML = yearsAvailable.map(y => `<option value="${y}">${y}</option>`).join('');
 }
 
 function setupFilterListeners() {
-    document.getElementById('year-jump').addEventListener('change', (e) => {
-        filterYear = parseInt(e.target.value);
-        filterMonth = '__ALL__'; 
-        document.getElementById('month-jump').value = '__ALL__';
-        updateMonthOptions();
-        renderActivities();
-        renderHeatmap();
-    });
+    const yearJump = document.getElementById('year-jump');
+    const monthJump = document.getElementById('month-jump');
+    const dayJump = document.getElementById('day-jump');
 
-    document.getElementById('month-jump').addEventListener('change', (e) => {
-        filterMonth = e.target.value;
-        updateDayOptions(); 
-        renderActivities();
-    });
+    if(yearJump) {
+        yearJump.addEventListener('change', (e) => {
+            filterYear = parseInt(e.target.value);
+            filterMonth = '__ALL__'; 
+            if(monthJump) monthJump.value = '__ALL__';
+            updateMonthOptions();
+            renderActivities();
+            renderHeatmap();
+        });
+    }
 
-    document.getElementById('day-jump').addEventListener('change', (e) => {
-        filterDay = e.target.value;
-        renderActivities();
-    });
+    if(monthJump) {
+        monthJump.addEventListener('change', (e) => {
+            filterMonth = e.target.value;
+            updateDayOptions(); 
+            renderActivities();
+        });
+    }
+
+    if(dayJump) {
+        dayJump.addEventListener('change', (e) => {
+            filterDay = e.target.value;
+            renderActivities();
+        });
+    }
 }
 
 function updateMonthOptions() {
     const monthSelect = document.getElementById('month-jump');
-    monthSelect.value = '__ALL__';
-    updateDayOptions();
+    if(monthSelect) {
+        monthSelect.value = '__ALL__';
+        updateDayOptions();
+    }
 }
 
 function updateDayOptions() {
     const daySelect = document.getElementById('day-jump');
+    if(!daySelect) return;
+
     daySelect.innerHTML = '<option value="__ALL__">Semua Hari</option>';
     
     if (filterMonth === '__ALL__') {
@@ -180,10 +208,11 @@ function updateDayOptions() {
     filterDay = '__ALL__'; 
 }
 
-// --- 3. RENDERING (PAPARAN) ---
+// --- 3. RENDERING ---
 
 function renderActivities() {
     const listEl = document.getElementById('activity-list');
+    if(!listEl) return;
     listEl.innerHTML = '';
 
     let filtered = allData.filter(item => {
@@ -199,13 +228,15 @@ function renderActivities() {
     const countAkt = filtered.filter(i => i.medium_aktiviti === 'Aktiviti').length;
     renderSummary(countBim, countAkt);
 
-    document.getElementById('list-meta').innerText = `Menunjukkan ${filtered.length} rekod bagi Tahun ${filterYear}`;
+    const metaEl = document.getElementById('list-meta');
+    if(metaEl) metaEl.innerText = `Menunjukkan ${filtered.length} rekod bagi Tahun ${filterYear}`;
 
     if (filtered.length === 0) {
         listEl.innerHTML = `<div class="text-center p-8 bg-gray-50 rounded-lg text-gray-500">Tiada rekod ditemui untuk tetapan ini.</div>`;
         return;
     }
 
+    // Grouping Logic
     const groups = {};
     filtered.forEach(item => {
         const mKey = item.tarikh.substring(0, 7); 
@@ -229,12 +260,12 @@ function renderActivities() {
             
             let actionButtons = '';
             if (currentUser) {
-                // escape single quotes
-                const jsonStr = JSON.stringify(act).replace(/'/g, "&#39;");
+                // escape quotes for HTML attribute safety
+                const safeJson = JSON.stringify(act).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
                 actionButtons = `
                 <div class="flex gap-2 mt-4 pt-3 border-t border-gray-100 no-print">
-                    <button onclick='openEditModal(${jsonStr}, false)' class="text-sm text-blue-600 hover:text-blue-800 font-medium">Edit</button>
-                    <button onclick='openEditModal(${jsonStr}, true)' class="text-sm text-purple-600 hover:text-purple-800 font-medium">Salin</button>
+                    <button onclick='openEditModal(${safeJson}, false)' class="text-sm text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                    <button onclick='openEditModal(${safeJson}, true)' class="text-sm text-purple-600 hover:text-purple-800 font-medium">Salin</button>
                     <button onclick="deleteActivity('${act.id}')" class="text-sm text-red-600 hover:text-red-800 font-medium ml-auto">Padam</button>
                 </div>
                 `;
@@ -270,6 +301,8 @@ function renderActivities() {
 
 function renderSummary(totalBim, totalAkt) {
     const boxEl = document.getElementById('summary-boxes');
+    if(!boxEl) return;
+
     const isBimActive = filterType === 'Bimbingan';
     const isAktActive = filterType === 'Aktiviti';
     
@@ -285,14 +318,158 @@ function renderSummary(totalBim, totalAkt) {
     `;
 }
 
-function toggleTypeFilter(type) {
+// --- 4. CRUD OPERATIONS ---
+
+const addForm = document.getElementById('add-activity-form');
+if(addForm) {
+    addForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!currentUser) return Swal.fire('Akses Ditolak', 'Sila log masuk dahulu.', 'warning');
+
+        const finalPayload = {
+            medium_aktiviti: document.getElementById('medium_aktiviti').value,
+            tajuk: document.getElementById('tajuk').value,
+            tarikh: document.getElementById('tarikh').value,
+            masa: document.getElementById('masa').value,
+            tempat: document.getElementById('tempat').value,
+            nama_guru: document.getElementById('nama_guru').value,
+            impak_catatan: document.getElementById('impak_catatan').value,
+            tindak_susul: document.getElementById('tindak_susul').value
+        };
+
+        const { error } = await supabaseClient.from('aktiviti').insert([finalPayload]);
+        if (error) {
+            Swal.fire('Ralat', error.message, 'error');
+        } else {
+            Swal.fire('Berjaya', 'Aktiviti ditambah.', 'success');
+            e.target.reset();
+            await initApp(); 
+            switchTab('list');
+        }
+    });
+}
+
+// --- FUNGSI GLOBAL UTAMA (Wajib Ada untuk HTML onclick) ---
+
+// 1. Switch Tab
+window.switchTab = function(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
+    
+    const content = document.getElementById(`tab-${tab}`);
+    const btn = document.getElementById(`tab-${tab}-btn`);
+    
+    if(content) content.classList.add('active');
+    if(btn) btn.classList.add('active');
+    
+    if (tab === 'heatmap') renderHeatmap();
+}
+
+// 2. Toggle Filter
+window.toggleTypeFilter = function(type) {
     filterType = (filterType === type) ? '__ALL__' : type;
     renderActivities();
 }
 
+// 3. Modal Actions (Login)
+window.closeLoginModal = function() { 
+    document.getElementById('login-modal').classList.add('hidden'); 
+}
+
+// 4. Modal Actions (Edit/Salin)
+let isCopyMode = false;
+
+window.openEditModal = function(item, copyMode) {
+    // Check if item is a string (happens if JSON.stringify failed or passed oddly)
+    if(typeof item === 'string') {
+        try { item = JSON.parse(item); } catch(e){ console.error(e); }
+    }
+    
+    isCopyMode = copyMode;
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('modal-title');
+    const btn = document.getElementById('save-changes-btn');
+    
+    title.innerText = copyMode ? 'Salin Aktiviti' : 'Kemas Kini Aktiviti';
+    btn.innerText = copyMode ? 'Simpan Salinan' : 'Simpan Perubahan';
+    
+    document.getElementById('edit-activity-id').value = item.id || '';
+    document.getElementById('edit-medium_aktiviti').value = item.medium_aktiviti || 'Bimbingan';
+    document.getElementById('edit-tarikh').value = item.tarikh || '';
+    document.getElementById('edit-tajuk').value = item.tajuk || '';
+    document.getElementById('edit-masa').value = item.masa || '';
+    document.getElementById('edit-tempat').value = item.tempat || '';
+    document.getElementById('edit-nama_guru').value = item.nama_guru || '';
+    document.getElementById('edit-impak_catatan').value = item.impak_catatan || '';
+    document.getElementById('edit-tindak_susul').value = item.tindak_susul || '';
+
+    if(modal) modal.classList.remove('hidden');
+};
+
+window.closeEditModal = function() {
+    const modal = document.getElementById('edit-modal');
+    if(modal) modal.classList.add('hidden');
+}
+
+window.deleteActivity = async function(id) {
+    const res = await Swal.fire({
+        title: 'Anda Pasti?', text: "Data tidak boleh dikembalikan!", icon: 'warning',
+        showCancelButton: true, confirmButtonText: 'Ya, Padam', cancelButtonText: 'Batal'
+    });
+    
+    if (res.isConfirmed) {
+        const { error } = await supabaseClient.from('aktiviti').delete().eq('id', id);
+        if (error) Swal.fire('Gagal', error.message, 'error');
+        else {
+            Swal.fire('Berjaya', 'Data dipadam.', 'success');
+            await initApp();
+        }
+    }
+}
+
+// Save Changes Button (Edit/Copy)
+const saveBtn = document.getElementById('save-changes-btn');
+if(saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+        const id = document.getElementById('edit-activity-id').value;
+        const payload = {
+            medium_aktiviti: document.getElementById('edit-medium_aktiviti').value,
+            tajuk: document.getElementById('edit-tajuk').value,
+            tarikh: document.getElementById('edit-tarikh').value,
+            masa: document.getElementById('edit-masa').value,
+            tempat: document.getElementById('edit-tempat').value,
+            nama_guru: document.getElementById('edit-nama_guru').value,
+            impak_catatan: document.getElementById('edit-impak_catatan').value,
+            tindak_susul: document.getElementById('edit-tindak_susul').value
+        };
+
+        let error;
+        if (isCopyMode) {
+            const { error: err } = await supabaseClient.from('aktiviti').insert([payload]);
+            error = err;
+        } else {
+            const { error: err } = await supabaseClient.from('aktiviti').update(payload).eq('id', id);
+            error = err;
+        }
+
+        if (error) {
+            Swal.fire('Gagal', error.message, 'error');
+        } else {
+            Swal.fire('Berjaya', 'Tindakan berjaya.', 'success');
+            closeEditModal();
+            await initApp();
+        }
+    });
+}
+
+// --- UTILITIES LAIN ---
+
 function renderHeatmap() {
     const grid = document.getElementById('heatmap-grid');
-    document.getElementById('heatmap-year-label').textContent = filterYear;
+    const label = document.getElementById('heatmap-year-label');
+    if(!grid) return;
+    
+    if(label) label.textContent = filterYear;
     
     const months = Array.from({length: 12}, (_, i) => ({
         idx: i,
@@ -331,135 +508,22 @@ function renderHeatmap() {
     }).join('');
 }
 
-// --- 4. CRUD OPERATIONS (Authenticated Only) ---
-
-// Tambah
-document.getElementById('add-activity-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!currentUser) return Swal.fire('Akses Ditolak', 'Sila log masuk dahulu.', 'warning');
-
-    const finalPayload = {
-        medium_aktiviti: document.getElementById('medium_aktiviti').value,
-        tajuk: document.getElementById('tajuk').value,
-        tarikh: document.getElementById('tarikh').value,
-        masa: document.getElementById('masa').value,
-        tempat: document.getElementById('tempat').value,
-        nama_guru: document.getElementById('nama_guru').value,
-        impak_catatan: document.getElementById('impak_catatan').value,
-        tindak_susul: document.getElementById('tindak_susul').value
-    };
-
-    const { error } = await supabaseClient.from('aktiviti').insert([finalPayload]);
-    if (error) {
-        Swal.fire('Ralat', error.message, 'error');
-    } else {
-        Swal.fire('Berjaya', 'Aktiviti ditambah.', 'success');
-        e.target.reset();
-        await initApp(); 
-        switchTab('list');
-    }
-});
-
-// Padam
-async function deleteActivity(id) {
-    const res = await Swal.fire({
-        title: 'Anda Pasti?', text: "Data tidak boleh dikembalikan!", icon: 'warning',
-        showCancelButton: true, confirmButtonText: 'Ya, Padam', cancelButtonText: 'Batal'
-    });
-    
-    if (res.isConfirmed) {
-        const { error } = await supabaseClient.from('aktiviti').delete().eq('id', id);
-        if (error) Swal.fire('Gagal', error.message, 'error');
-        else {
-            Swal.fire('Berjaya', 'Data dipadam.', 'success');
-            await initApp();
-        }
-    }
-}
-
-// Edit & Salin Modal Logic
-let isCopyMode = false;
-window.openEditModal = (item, copyMode) => {
-    isCopyMode = copyMode;
-    const modal = document.getElementById('edit-modal');
-    const title = document.getElementById('modal-title');
-    const btn = document.getElementById('save-changes-btn');
-    
-    title.innerText = copyMode ? 'Salin Aktiviti' : 'Kemas Kini Aktiviti';
-    btn.innerText = copyMode ? 'Simpan Salinan' : 'Simpan Perubahan';
-    
-    document.getElementById('edit-activity-id').value = item.id;
-    document.getElementById('edit-medium_aktiviti').value = item.medium_aktiviti;
-    document.getElementById('edit-tarikh').value = item.tarikh;
-    document.getElementById('edit-tajuk').value = item.tajuk;
-    document.getElementById('edit-masa').value = item.masa;
-    document.getElementById('edit-tempat').value = item.tempat;
-    document.getElementById('edit-nama_guru').value = item.nama_guru;
-    document.getElementById('edit-impak_catatan').value = item.impak_catatan;
-    document.getElementById('edit-tindak_susul').value = item.tindak_susul;
-
-    modal.classList.remove('hidden');
-};
-
-function closeEditModal() {
-    document.getElementById('edit-modal').classList.add('hidden');
-}
-
-document.getElementById('save-changes-btn').addEventListener('click', async () => {
-    const id = document.getElementById('edit-activity-id').value;
-    const payload = {
-        medium_aktiviti: document.getElementById('edit-medium_aktiviti').value,
-        tajuk: document.getElementById('edit-tajuk').value,
-        tarikh: document.getElementById('edit-tarikh').value,
-        masa: document.getElementById('edit-masa').value,
-        tempat: document.getElementById('edit-tempat').value,
-        nama_guru: document.getElementById('edit-nama_guru').value,
-        impak_catatan: document.getElementById('edit-impak_catatan').value,
-        tindak_susul: document.getElementById('edit-tindak_susul').value
-    };
-
-    let error;
-    if (isCopyMode) {
-        const { error: err } = await supabaseClient.from('aktiviti').insert([payload]);
-        error = err;
-    } else {
-        const { error: err } = await supabaseClient.from('aktiviti').update(payload).eq('id', id);
-        error = err;
-    }
-
-    if (error) {
-        Swal.fire('Gagal', error.message, 'error');
-    } else {
-        Swal.fire('Berjaya', 'Tindakan berjaya.', 'success');
-        closeEditModal();
-        await initApp();
-    }
-});
-
-
-// --- UTILITIES ---
-function switchTab(tab) {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
-    
-    document.getElementById(`tab-${tab}`).classList.add('active');
-    document.getElementById(`tab-${tab}-btn`).classList.add('active');
-    
-    if (tab === 'heatmap') renderHeatmap();
-}
-
 function linkify(text) {
     if (!text) return '-';
     const urlRegex = /(https?:\/\/[^\s<]+)/g;
     return text.replace(urlRegex, url => `<a href="${url}" target="_blank" class="text-blue-600 underline hover:text-blue-800 break-all">${url}</a>`);
 }
 
-document.getElementById('print-btn').addEventListener('click', () => window.print());
+const printBtn = document.getElementById('print-btn');
+if(printBtn) printBtn.addEventListener('click', () => window.print());
 
 window.addEventListener('scroll', () => {
     const h = document.getElementById('stickyHeader');
-    if (window.scrollY > 10) h.classList.add('scrolled');
-    else h.classList.remove('scrolled');
+    if(h) {
+        if (window.scrollY > 10) h.classList.add('scrolled');
+        else h.classList.remove('scrolled');
+    }
 });
 
+// INIT
 document.addEventListener('DOMContentLoaded', initApp);
