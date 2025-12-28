@@ -1,46 +1,57 @@
 /* Asas */
 body { font-family: 'Inter', sans-serif; }
 
-/* Header melekat */
-.sticky-header{
+/* Sticky Header dengan blur effect */
+.sticky-header {
   position: sticky; top: 0; z-index: 40;
-  background: #f9fafb;
+  background: rgba(249, 250, 251, 0.95);
+  backdrop-filter: blur(5px);
+  transition: box-shadow 0.2s;
 }
-.sticky-header.scrolled{
-  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+.sticky-header.scrolled {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   border-bottom: 1px solid #e5e7eb;
 }
 
-/* Tab */
-.tab-button{ padding:0.75rem 1rem; cursor:pointer; border-bottom:3px solid transparent; color:#6b7280; }
-.tab-button.active{ border-bottom-color:#3b82f6; color:#111827; font-weight:600; }
-.tab-content{ display:none; }
-.tab-content.active{ display:block; }
-
-/* Panel pemilik */
-.brand-owner { position: relative; }
-.brand-photo{
-  width:56px; height:56px; border-radius:9999px;
-  object-fit:cover; object-position:center;
-  border:3px solid #d4af37; /* cincin emas */
-  box-shadow:0 1px 2px rgba(0,0,0,.08);
+/* Tab Navigation */
+.tab-button {
+  padding: 0.75rem 1rem; cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: #6b7280; transition: all 0.2s;
+  white-space: nowrap;
 }
-.brand-avatar{
-  width:56px; height:56px; border-radius:9999px;
-  display:flex; align-items:center; justify-content:center;
-  background:#111827; color:#fff; font-weight:700; letter-spacing:.5px;
+.tab-button:hover { color: #374151; }
+.tab-button.active {
+  border-bottom-color: #2563eb; color: #1e40af; font-weight: 600;
+}
+.tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }
+.tab-content.active { display: block; }
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-/* Modal di atas header */
-#edit-modal{ z-index: 60; }
+/* Panel Pemilik */
+.brand-photo {
+  width: 56px; height: 56px; border-radius: 9999px;
+  object-fit: cover; border: 3px solid #d4af37;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.brand-avatar {
+  width: 56px; height: 56px; border-radius: 9999px;
+  display: flex; align-items: center; justify-content: center;
+  background: #111827; color: #fff; font-weight: 700;
+}
 
-/* Cetakan — sentiasa cetak tab Senarai Aktiviti sahaja */
-.no-print { }
-@media print{
-  body { background:#fff; }
-  .no-print{ display:none !important; }
-  .sticky-header{ position: static; box-shadow:none; border:none; }
+/* Summary Box Hover Effect */
+.summary-box { transition: transform 0.2s, box-shadow 0.2s; }
+.summary-box:hover { transform: translateY(-3px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
 
-  #tab-add, #tab-heatmap{ display:none !important; }
-  #tab-list{ display:block !important; }
+/* Print Settings */
+@media print {
+  body { background: #fff; }
+  .no-print, #stickyHeader { position: static; box-shadow: none; border: none; }
+  .no-print, #tab-add, #tab-heatmap, #auth-container { display: none !important; }
+  #tab-list { display: block !important; }
 }

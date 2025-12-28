@@ -4,844 +4,247 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Pelaporan Aktiviti Pegawai</title>
-
   <link rel="icon" href="assets/img/logo-kpm.png" type="image/png"/>
+  
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-
+  
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
+  
   <link rel="stylesheet" href="assets/css/styles.css"/>
-  <style>
-    /* Tambahan style untuk transition filter */
-    .summary-box { transition: all 0.2s ease-in-out; }
-    .summary-box:hover { transform: translateY(-2px); }
-    .summary-box:active { transform: scale(0.98); }
-    /* Pastikan dropdown nampak standard */
-    select:disabled { background-color: #f3f4f6; cursor: not-allowed; opacity: 0.7; color: #9ca3af; }
-  </style>
 </head>
-<body class="bg-gray-50">
-  <div class="max-w-4xl mx-auto p-4 md:p-6">
+<body class="bg-gray-50 text-gray-800">
 
+  <div class="max-w-4xl mx-auto p-4 md:p-6">
     <div id="stickyHeader" class="sticky-header">
       <header class="pb-4 bg-gray-50">
-        <div class="flex items-start gap-3 justify-between">
+        <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div>
-            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">Pelaporan Aktiviti Pegawai</h1>
-            <p class="text-gray-500">REKOD dan RUMUSAN aktiviti pegawai secara maya.</p>
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">Pelaporan Aktiviti</h1>
+            <p class="text-gray-500">Rekod dan rumusan aktiviti pegawai.</p>
           </div>
-          <div class="no-print">
-            <button id="print-btn" class="px-3 py-2 rounded-md border bg-white hover:bg-gray-50 text-sm font-medium">
+          
+          <div class="flex items-center gap-2 no-print self-end md:self-auto">
+            <button id="print-btn" class="px-3 py-2 rounded-md border bg-white hover:bg-gray-50 text-sm font-medium transition">
               Cetak
             </button>
+            
+            <div id="auth-container">
+              <button id="btn-show-login" class="px-3 py-2 rounded-md bg-gray-800 text-white text-sm font-medium hover:bg-gray-900 transition shadow-sm">
+                Log Masuk Admin
+              </button>
+              <button id="btn-logout" class="hidden px-3 py-2 rounded-md border border-red-200 bg-red-50 text-red-700 text-sm font-medium hover:bg-red-100 transition">
+                Log Keluar
+              </button>
+            </div>
           </div>
         </div>
 
         <section class="mt-4 bg-white border border-gray-200 rounded-xl p-4 shadow-sm brand-owner">
           <div class="flex items-start gap-3">
-            <img src="assets/img/malik.png?v=2" alt="Foto Malik Abdullah bin Adanan"
-                 class="brand-photo" loading="lazy"
+            <img src="assets/img/malik.png?v=2" alt="Foto Profil" class="brand-photo" loading="lazy"
                  onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');"/>
             <div class="brand-avatar hidden">MA</div>
             <div>
-              <div class="text-sm text-gray-500">Pelaporan milik</div>
-              <div class="text-lg font-semibold text-gray-900">Malik Abdullah bin Adanan</div>
-              <div class="text-sm text-gray-700">Penolong PPD Unit Sumber Teknologi Pendidikan</div>
-              <div class="text-sm text-gray-700">Pejabat Pendidikan Daerah Alor Gajah</div>
+              <div class="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Pelaporan Milik</div>
+              <div class="text-lg font-bold text-gray-900 leading-tight">Malik Abdullah bin Adanan</div>
+              <div class="text-sm text-gray-600 mt-1">Penolong PPD Unit Sumber Teknologi Pendidikan</div>
+              <div class="text-sm text-gray-500">Pejabat Pendidikan Daerah Alor Gajah</div>
             </div>
           </div>
         </section>
 
-        <div class="border-b border-gray-200 mt-5 no-print">
-          <nav class="flex space-x-4" aria-label="Tabs">
-            <button id="tab-add-btn"     class="tab-button active" onclick="switchTab('add')">Tambah Aktiviti</button>
-            <button id="tab-list-btn"    class="tab-button"        onclick="switchTab('list')">Senarai Aktiviti</button>
-            <button id="tab-heatmap-btn" class="tab-button"        onclick="switchTab('heatmap')">Peta Bulan</button>
+        <div class="border-b border-gray-200 mt-5 no-print overflow-x-auto">
+          <nav class="flex space-x-4 min-w-max" aria-label="Tabs">
+            <button id="tab-add-btn" class="tab-button hidden" onclick="switchTab('add')">Tambah Aktiviti</button>
+            <button id="tab-list-btn" class="tab-button active" onclick="switchTab('list')">Senarai Aktiviti</button>
+            <button id="tab-heatmap-btn" class="tab-button" onclick="switchTab('heatmap')">Peta Tahunan</button>
           </nav>
         </div>
       </header>
     </div>
 
-    <main class="pt-4">
-      <div>
-        <div id="tab-add" class="tab-content active">
-          <div class="bg-white p-6 rounded-lg shadow-sm">
-            <form id="add-activity-form" class="space-y-4">
-              <div>
-                <label for="medium_aktiviti" class="block text-sm font-medium text-gray-700">Jenis</label>
-                <select id="medium_aktiviti" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
-                  <option value="">-- Sila Pilih --</option>
+    <main class="pt-4 min-h-[500px]">
+      
+      <div id="tab-add" class="tab-content">
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <h2 class="text-lg font-semibold mb-4 text-gray-800">Tambah Aktiviti Baharu</h2>
+          <form id="add-activity-form" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <div>
+                <label class="block text-sm font-medium text-gray-700">Jenis</label>
+                <select id="medium_aktiviti" class="mt-1 block w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
                   <option value="Bimbingan">Bimbingan</option>
                   <option value="Aktiviti">Aktiviti</option>
                 </select>
               </div>
-
               <div>
-                <label for="tajuk" class="block text-sm font-medium text-gray-700">Tajuk Aktiviti</label>
-                <input type="text" id="tajuk" placeholder="Contoh: Bengkel Robotik" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required/>
-              </div>
-
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label for="tarikh" class="block text-sm font-medium text-gray-700">Tarikh</label>
-                  <input type="date" id="tarikh" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required/>
-                </div>
-                <div>
-                  <label for="masa" class="block text-sm font-medium text-gray-700">Tempoh Masa</label>
-                  <input type="text" id="masa" placeholder="Contoh: 2:00 PM - 4:00 PM" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required/>
-                </div>
-              </div>
-
-              <div>
-                <label for="tempat" class="block text-sm font-medium text-gray-700">Tempat</label>
-                <input type="text" id="tempat" placeholder="Contoh: Makmal Komputer sekolah" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required/>
-              </div>
-
-              <div>
-                <label for="nama_guru" class="block text-sm font-medium text-gray-700">Nama Guru Dibimbing</label>
-                <input type="text" id="nama_guru" placeholder="Contoh: Cikgu Ali bin Abu" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"/>
-              </div>
-
-              <div>
-                <label for="impak_catatan" class="block text-sm font-medium text-gray-700">Impak / Catatan</label>
-                <textarea id="impak_catatan" rows="3" placeholder="Ringkasan impak atau catatan bimbingan" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"></textarea>
-              </div>
-
-              <div>
-                <label for="tindak_susul" class="block text-sm font-medium text-gray-700">Tindak Susul</label>
-                <textarea id="tindak_susul" rows="2" placeholder="Apakah tindakan susulan / tugasan seterusnya?" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"></textarea>
-              </div>
-
-              <div class="text-right no-print">
-                <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
-                  Simpan Aktiviti
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <div id="tab-list" class="tab-content">
-          <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
-            
-            <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-              <div>
-                <label for="month-jump" class="block text-sm font-medium text-gray-700">Pilih Bulan</label>
-                <select id="month-jump" class="mt-1 block w-full md:w-56 p-2 border border-gray-300 rounded-md shadow-sm no-print">
-                  <option value="__ALL__">Semua Bulan</option>
-                </select>
-              </div>
-              
-              <div>
-                <label for="day-jump" class="block text-sm font-medium text-gray-700">Pilih Hari</label>
-                <select id="day-jump" disabled class="mt-1 block w-full md:w-32 p-2 border border-gray-300 rounded-md shadow-sm no-print text-gray-700">
-                  <option value="__ALL__">Semua Hari</option>
-                </select>
+                <label class="block text-sm font-medium text-gray-700">Tarikh</label>
+                <input type="date" id="tarikh" class="mt-1 block w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg" required/>
               </div>
             </div>
 
-            <div class="flex items-center gap-3 no-print">
-              <p id="list-meta" class="text-sm text-gray-500 hidden md:block"></p>
-              <button id="toggle-edit-btn" type="button"
-                class="px-3 py-2 rounded-md border text-sm font-medium bg-white hover:bg-gray-50 whitespace-nowrap">
-                Mod Edit: <span id="edit-state-label">Terkunci</span>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Tajuk Aktiviti</label>
+              <input type="text" id="tajuk" placeholder="Contoh: Bengkel Robotik" class="mt-1 block w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg" required/>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Tempoh Masa</label>
+                <input type="text" id="masa" placeholder="cth: 8.00 Pagi - 1.00 Petang" class="mt-1 block w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg" required/>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Tempat</label>
+                <input type="text" id="tempat" placeholder="cth: SK Alor Gajah 1" class="mt-1 block w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg" required/>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Nama Guru (Jika ada)</label>
+              <input type="text" id="nama_guru" class="mt-1 block w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg"/>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Impak / Catatan</label>
+              <textarea id="impak_catatan" rows="3" class="mt-1 block w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg"></textarea>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Tindak Susul</label>
+              <textarea id="tindak_susul" rows="2" class="mt-1 block w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg"></textarea>
+            </div>
+
+            <div class="text-right">
+              <button type="submit" class="inline-flex justify-center py-2.5 px-5 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Simpan Rekod
               </button>
-            </div>
-          </div>
-          
-          <p id="list-meta-mobile" class="text-sm text-gray-500 mb-2 md:hidden"></p>
-
-          <div id="summary-boxes" class="grid grid-cols-2 gap-3 mb-4"></div>
-
-          <div id="activity-list" class="space-y-6">
-            <p class="text-gray-500">Memuatkan aktiviti...</p>
-          </div>
-        </div>
-
-        <div id="tab-heatmap" class="tab-content">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-semibold text-gray-800">Peta Bulan • Tahun Semasa</h2>
-            <div class="text-xs text-gray-500">Keamatan latar = jumlah relatif bulanan</div>
-          </div>
-
-          <div id="heatmap-legend" class="flex items-center gap-2 text-xs text-gray-600 mb-2">
-            <span>Rendah</span>
-            <div class="h-3 w-8 rounded" style="background: rgba(212,175,55,0.06);"></div>
-            <div class="h-3 w-8 rounded" style="background: rgba(212,175,55,0.14);"></div>
-            <div class="h-3 w-8 rounded" style="background: rgba(212,175,55,0.22);"></div>
-            <div class="h-3 w-8 rounded" style="background: rgba(212,175,55,0.30);"></div>
-            <span>Tinggi</span>
-          </div>
-
-          <div id="heatmap-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"></div>
-        </div>
-      </div>
-    </main>
-  </div>
-
-  <div id="edit-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
-    <div class="relative top-20 mx-auto w-full max-w-lg">
-      <div class="bg-white rounded-md shadow-lg border max-h/[80vh] max-h-[80vh] flex flex-col">
-        <h3 id="modal-title" class="text-lg font-medium text-gray-900 text-center py-3 border-b">Kemas Kini Aktiviti</h3>
-
-        <div class="px-4 py-3 overflow-auto">
-          <form id="edit-activity-form" class="space-y-4 text-left">
-            <input type="hidden" id="edit-activity-id"/>
-            <div>
-              <label for="edit-medium_aktiviti" class="block text-sm font-medium text-gray-700">Jenis</label>
-              <select id="edit-medium_aktiviti" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
-                <option value="">-- Sila Pilih --</option>
-                <option value="Bimbingan">Bimbingan</option>
-                <option value="Aktiviti">Aktiviti</option>
-              </select>
-            </div>
-            <div>
-              <label for="edit-tajuk" class="block text-sm font-medium text-gray-700">Tajuk Aktiviti</label>
-              <input type="text" id="edit-tajuk" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required/>
-            </div>
-            <div>
-              <label for="edit-tarikh" class="block text-sm font-medium text-gray-700">Tarikh</label>
-              <input type="date" id="edit-tarikh" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required/>
-            </div>
-            <div>
-              <label for="edit-masa" class="block text-sm font-medium text-gray-700">Tempoh Masa</label>
-              <input type="text" id="edit-masa" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required/>
-            </div>
-            <div>
-              <label for="edit-tempat" class="block text-sm font-medium text-gray-700">Tempat</label>
-              <input type="text" id="edit-tempat" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required/>
-            </div>
-            <div>
-              <label for="edit-nama_guru" class="block text-sm font-medium text-gray-700">Nama Guru Dibimbing</label>
-              <input type="text" id="edit-nama_guru" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"/>
-            </div>
-            <div>
-              <label for="edit-impak_catatan" class="block text-sm font-medium text-gray-700">Impak / Catatan</label>
-              <textarea id="edit-impak_catatan" rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"></textarea>
-            </div>
-            <div>
-              <label for="edit-tindak_susul" class="block text-sm font-medium text-gray-700">Tindak Susul</label>
-              <textarea id="edit-tindak_susul" rows="2" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"></textarea>
             </div>
           </form>
         </div>
+      </div>
 
-        <div class="px-4 py-3 border-t bg-gray-50 flex gap-2 sticky bottom-0">
-          <button id="save-changes-btn" class="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">
-            Simpan Perubahan
+      <div id="tab-list" class="tab-content active">
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 no-print">
+          <div class="flex flex-col md:flex-row gap-4 items-end">
+            <div class="w-full md:w-1/4">
+              <label for="year-jump" class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Tahun</label>
+              <select id="year-jump" class="block w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
+                </select>
+            </div>
+
+            <div class="w-full md:w-1/4">
+              <label for="month-jump" class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Bulan</label>
+              <select id="month-jump" class="block w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
+                <option value="__ALL__">Semua Bulan</option>
+              </select>
+            </div>
+            
+            <div class="w-full md:w-1/4">
+              <label for="day-jump" class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Hari</label>
+              <select id="day-jump" disabled class="block w-full p-2 border border-gray-300 rounded-md text-sm bg-gray-50 text-gray-500">
+                <option value="__ALL__">Semua Hari</option>
+              </select>
+            </div>
+
+            <div class="w-full md:w-auto pb-1 text-sm text-gray-500 text-right md:text-left flex-grow">
+               <span id="list-meta">Memuatkan data...</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="summary-boxes" class="grid grid-cols-2 gap-4 mb-6"></div>
+
+        <div id="activity-list" class="space-y-6"></div>
+      </div>
+
+      <div id="tab-heatmap" class="tab-content">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-bold text-gray-800">Peta Intensiti Tahunan</h2>
+          <span id="heatmap-year-label" class="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-bold">Tahun Ini</span>
+        </div>
+
+        <div id="heatmap-legend" class="flex items-center gap-2 text-xs text-gray-600 mb-4 bg-white p-2 rounded-lg border w-fit">
+          <span>Kurang</span>
+          <div class="h-4 w-6 rounded bg-[rgba(212,175,55,0.1)]"></div>
+          <div class="h-4 w-6 rounded bg-[rgba(212,175,55,0.4)]"></div>
+          <div class="h-4 w-6 rounded bg-[rgba(212,175,55,0.7)]"></div>
+          <div class="h-4 w-6 rounded bg-[rgba(212,175,55,1.0)]"></div>
+          <span>Aktif</span>
+        </div>
+
+        <div id="heatmap-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"></div>
+      </div>
+
+    </main>
+  </div>
+
+  <div id="login-modal" class="fixed inset-0 z-50 hidden bg-gray-900 bg-opacity-60 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden transform transition-all">
+      <div class="bg-gray-800 p-4 flex justify-between items-center">
+        <h3 class="text-white font-semibold">Log Masuk Admin</h3>
+        <button onclick="closeLoginModal()" class="text-gray-400 hover:text-white">&times;</button>
+      </div>
+      <div class="p-6">
+        <form id="login-form" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Emel</label>
+            <input type="email" id="login-email" class="mt-1 block w-full p-2.5 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Kata Laluan</label>
+            <input type="password" id="login-password" class="mt-1 block w-full p-2.5 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required />
+          </div>
+          <button type="submit" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition transform active:scale-95">
+            Masuk
           </button>
-          <button id="close-modal-btn" class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300">
-            Batal
-          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="edit-modal" class="fixed inset-0 z-50 hidden bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center backdrop-blur-sm">
+    <div class="relative w-full max-w-lg mx-auto m-4">
+      <div class="bg-white rounded-xl shadow-xl border border-gray-200 flex flex-col max-h-[90vh]">
+        <div class="flex justify-between items-center p-4 border-b">
+          <h3 id="modal-title" class="text-lg font-bold text-gray-900">Kemas Kini</h3>
+          <button onclick="closeEditModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+        </div>
+
+        <div class="p-5 overflow-y-auto">
+          <form id="edit-activity-form" class="space-y-4">
+            <input type="hidden" id="edit-activity-id"/>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Jenis</label>
+                    <select id="edit-medium_aktiviti" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                        <option value="Bimbingan">Bimbingan</option>
+                        <option value="Aktiviti">Aktiviti</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Tarikh</label>
+                    <input type="date" id="edit-tarikh" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
+                </div>
+            </div>
+            <input type="text" id="edit-tajuk" placeholder="Tajuk" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required/>
+            <input type="text" id="edit-masa" placeholder="Masa" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
+            <input type="text" id="edit-tempat" placeholder="Tempat" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
+            <input type="text" id="edit-nama_guru" placeholder="Nama Guru" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
+            <textarea id="edit-impak_catatan" rows="3" placeholder="Impak" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
+            <textarea id="edit-tindak_susul" rows="2" placeholder="Tindak Susul" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
+          </form>
+        </div>
+
+        <div class="p-4 border-t bg-gray-50 flex gap-3">
+          <button id="save-changes-btn" class="flex-1 py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium shadow-sm">Simpan</button>
+          <button onclick="closeEditModal()" class="flex-1 py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 font-medium">Batal</button>
         </div>
       </div>
     </div>
   </div>
 
-  <script>
-    // Supabase Configuration
-    const SUPABASE_URL = 'https://umzekpsayclptmhgzotf.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVtemVrcHNheWNscHRtaGd6b3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjMwNTAsImV4cCI6MjA3ODIzOTA1MH0.FbV1ESJrckyJ4kT4hR3DKh01GHeHoCTEfU5kgPWmIRs';
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    // Utilities
-    const currentYear = new Date().getFullYear();
-    const msMY = new Intl.DateTimeFormat('ms-MY', { year:'numeric', month:'long' });
-    const monthLabelMY = new Intl.DateTimeFormat('ms-MY', { month:'long' });
-    const fullDate = (d)=> new Date(d).toLocaleDateString('ms-MY', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-    const monthKey = (d)=> { const dt = new Date(d); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`; };
-    const isCurrentYear = (d)=> new Date(d).getFullYear() === currentYear;
-
-    function linkifyText(text) {
-      if (!text || text.trim() === '') {
-        return '-';
-      }
-      const urlRegex = /(https?:\/\/[^\s<]+)/g;
-      return text.replace(urlRegex, (url) => {
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 hover:underline" style="word-break: break-all;">${url}</a>`;
-      });
-    }
-
-    const activityListEl = document.getElementById('activity-list');
-    const monthJumpEl = document.getElementById('month-jump');
-    const dayJumpEl = document.getElementById('day-jump'); // Dropdown Hari
-    const listMetaEl = document.getElementById('list-meta');
-    const listMetaMobileEl = document.getElementById('list-meta-mobile'); 
-    const summaryBoxesEl = document.getElementById('summary-boxes');
-    const heatmapGridEl = document.getElementById('heatmap-grid');
-
-    let cacheData = [];
-    let monthIndex = [];
-    let isCopyMode = false;
-    
-    // FILTER STATE
-    let currentTypeFilter = '__ALL__';
-
-    const SELECTED_KEY_STORAGE = 'selectedMonth_list';
-    const getSelectedMonth = ()=> sessionStorage.getItem(SELECTED_KEY_STORAGE) || monthKey(new Date());
-    const setSelectedMonth = (val)=> sessionStorage.setItem(SELECTED_KEY_STORAGE, val);
-
-    document.getElementById('print-btn').addEventListener('click', ()=> window.print());
-    window.addEventListener('beforeprint', ()=>{ renderActivities(); });
-
-    function buildMonthIndex(rows){
-      const map = new Map();
-      rows.forEach(r=>{
-        if(!r.tarikh || !isCurrentYear(r.tarikh)) return;
-        const key = monthKey(r.tarikh);
-        const label = msMY.format(new Date(r.tarikh));
-        const cur = map.get(key) || { key, label, count:0 };
-        cur.count += 1;
-        map.set(key, cur);
-      });
-      return Array.from(map.values()).sort((a,b)=> a.key.localeCompare(b.key));
-    }
-
-    function renderMonthOptions(selectedKey){
-      monthJumpEl.innerHTML =
-        `<option value="__ALL__">Semua Bulan</option>` +
-        monthIndex.map(mi=>`<option value="${mi.key}">${mi.label} (${mi.count})</option>`).join('');
-      
-      const keys = new Set(['__ALL__', ...monthIndex.map(m=>m.key)]);
-      monthJumpEl.value = keys.has(selectedKey) ? selectedKey : '__ALL__';
-      
-      // Initial call to populate days based on loaded data
-      updateDayOptions(monthJumpEl.value);
-    }
-
-    // --- FUNGSI BARU: JANA HARI BERDASARKAN DATA (RESPONSIVE) ---
-    function updateDayOptions(selectedMonthKey) {
-        // 1. Kosongkan dropdown dahulu
-        dayJumpEl.innerHTML = '';
-
-        // 2. Jika "Semua Bulan" dipilih, disable dropdown hari
-        if (selectedMonthKey === '__ALL__') {
-            dayJumpEl.innerHTML = `<option value="__ALL__">Semua Hari</option>`;
-            dayJumpEl.disabled = true;
-            dayJumpEl.value = '__ALL__';
-            return;
-        }
-
-        // 3. Tapis data dari cacheData untuk bulan yang dipilih sahaja
-        const activitiesInMonth = cacheData.filter(a => monthKey(a.tarikh) === selectedMonthKey);
-
-        // 4. Jika tiada sebarang aktiviti dalam bulan itu
-        if (activitiesInMonth.length === 0) {
-            dayJumpEl.innerHTML = `<option value="">Tiada Rekod</option>`;
-            dayJumpEl.disabled = true;
-            return;
-        }
-
-        // 5. Dapatkan senarai hari unik (buang duplikasi)
-        const uniqueDays = [...new Set(activitiesInMonth.map(a => new Date(a.tarikh).getDate()))];
-        
-        // 6. Susun nombor hari (Ascending: 1, 5, 12...)
-        uniqueDays.sort((a, b) => a - b);
-
-        // 7. Masukkan pilihan ke dalam dropdown
-        // Option default
-        const defaultOpt = document.createElement('option');
-        defaultOpt.value = '__ALL__';
-        defaultOpt.textContent = 'Semua Hari';
-        dayJumpEl.appendChild(defaultOpt);
-
-        // Loop hari yang wujud sahaja
-        uniqueDays.forEach(day => {
-            const opt = document.createElement('option');
-            opt.value = day;
-            opt.textContent = day; // Papar nombor sahaja
-            dayJumpEl.appendChild(opt);
-        });
-
-        // Aktifkan dropdown
-        dayJumpEl.disabled = false;
-        dayJumpEl.value = '__ALL__'; // Reset ke 'Semua Hari' bila tukar bulan
-    }
-
-    // FUNCTION TO HANDLE FILTER CLICK (Bimbingan/Aktiviti)
-    function setTypeFilter(type) {
-        if (currentTypeFilter === type) {
-            currentTypeFilter = '__ALL__';
-        } else {
-            currentTypeFilter = type;
-        }
-        renderActivities();
-    }
-
-    function renderSummary(totalBimbingan, totalAktiviti, scopeLabel){
-      const isBimbinganActive = currentTypeFilter === 'Bimbingan';
-      const isAktivitiActive = currentTypeFilter === 'Aktiviti';
-
-      const bimbinganClass = isBimbinganActive 
-        ? "ring-2 ring-green-500 ring-offset-2 bg-green-100 border-green-300" 
-        : "bg-green-50 border-green-200 hover:bg-green-100";
-      
-      const aktivitiClass = isAktivitiActive 
-        ? "ring-2 ring-blue-500 ring-offset-2 bg-blue-100 border-blue-300" 
-        : "bg-blue-50 border-blue-200 hover:bg-blue-100";
-
-      const filterIcon = `<svg class="w-4 h-4 inline-block ml-1 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>`;
-
-      summaryBoxesEl.innerHTML = `
-        <div onclick="setTypeFilter('Bimbingan')" class="summary-box cursor-pointer rounded-xl p-4 border transition-all ${bimbinganClass}" title="Klik untuk tapis Bimbingan">
-          <div class="flex justify-between items-start">
-            <div class="text-sm text-green-700 font-semibold">Bimbingan ${isBimbinganActive ? '✓' : ''}</div>
-            ${isBimbinganActive ? '' : filterIcon}
-          </div>
-          <div class="text-xs text-green-600 mb-1">${scopeLabel}</div>
-          <div class="mt-1 text-4xl font-extrabold text-green-800">${totalBimbingan}</div>
-        </div>
-        
-        <div onclick="setTypeFilter('Aktiviti')" class="summary-box cursor-pointer rounded-xl p-4 border transition-all ${aktivitiClass}" title="Klik untuk tapis Aktiviti">
-          <div class="flex justify-between items-start">
-             <div class="text-sm text-blue-700 font-semibold">Aktiviti ${isAktivitiActive ? '✓' : ''}</div>
-             ${isAktivitiActive ? '' : filterIcon}
-          </div>
-          <div class="text-xs text-blue-600 mb-1">${scopeLabel}</div>
-          <div class="mt-1 text-4xl font-extrabold text-blue-800">${totalAktiviti}</div>
-        </div>
-      `;
-    }
-
-    function renderActivities(){
-      activityListEl.innerHTML = '';
-
-      // 1. Ambil nilai filter semasa
-      const monthFilter = monthJumpEl.value; // __ALL__ atau YYYY-MM
-      const dayFilter = dayJumpEl.value;     // __ALL__ atau nombor hari (contoh: '16')
-
-      const base = cacheData.filter(a=> isCurrentYear(a.tarikh));
-      let filtered = [];
-
-      // 2. Tapis ikut BULAN
-      if(monthFilter === '__ALL__') {
-          filtered = base;
-      } else {
-          filtered = base.filter(a => monthKey(a.tarikh) === monthFilter);
-      }
-
-      // 3. Tapis ikut HARI (Jika hari dipilih)
-      let isSpecificDay = false;
-      if (monthFilter !== '__ALL__' && dayFilter !== '__ALL__' && dayFilter !== '') {
-          isSpecificDay = true;
-          // Gunakan getDate() untuk perbandingan yang selamat (nombor vs nombor)
-          filtered = filtered.filter(a => {
-              const d = new Date(a.tarikh);
-              return d.getDate() === parseInt(dayFilter); 
-          });
-      }
-
-      // Get totals BEFORE type filtering
-      const totalBimbingan = filtered.filter(x=>x.medium_aktiviti==='Bimbingan').length;
-      const totalAktiviti  = filtered.filter(x=>x.medium_aktiviti==='Aktiviti').length;
-      
-      // Determine Scope Label for Summary Box
-      let scopeLabel = '';
-      if(monthFilter === '__ALL__') scopeLabel = 'Semua Bulan';
-      else if(isSpecificDay) {
-         // Format tarikh penuh, cth: "16 Disember 2025"
-         const [y, m] = monthFilter.split('-');
-         const dateObj = new Date(y, m-1, dayFilter);
-         scopeLabel = dateObj.toLocaleDateString('ms-MY', { day:'numeric', month:'long', year:'numeric' });
-      } else {
-         scopeLabel = msMY.format(new Date(`${monthFilter}-01`));
-      }
-
-      renderSummary(totalBimbingan, totalAktiviti, scopeLabel);
-
-      // 4. Tapis ikut JENIS (Bimbingan/Aktiviti)
-      if (currentTypeFilter !== '__ALL__') {
-        filtered = filtered.filter(a => a.medium_aktiviti === currentTypeFilter);
-      }
-
-      // 5. Paparan Jika Kosong
-      if(filtered.length===0){
-        let msg = `Tiada aktiviti untuk `;
-        if(isSpecificDay) msg += `tarikh <b>${scopeLabel}</b>`;
-        else if(monthFilter !== '__ALL__') msg += `bulan pilihan ini`;
-        else msg += `tahun ${currentYear}`;
-        
-        if (currentTypeFilter !== '__ALL__') msg += ` bagi kategori <b>${currentTypeFilter}</b>`;
-
-        activityListEl.innerHTML = `<p class="text-gray-500 bg-gray-100 p-4 rounded text-center">${msg}.</p>`;
-        listMetaEl.innerHTML = '';
-        listMetaMobileEl.innerHTML = '';
-        return;
-      }
-
-      // 6. Grouping & Rendering
-      const groups = new Map();
-      
-      filtered.forEach(a=>{
-        const key = monthKey(a.tarikh);
-        const arr = groups.get(key) || [];
-        arr.push(a);
-        groups.set(key, arr);
-      });
-
-      const orderedKeys = Array.from(groups.keys()).sort((a,b)=> a.localeCompare(b));
-      let totalShown = 0;
-
-      orderedKeys.forEach(key=>{
-        const items = groups.get(key).sort((a,b)=> new Date(a.tarikh) - new Date(b.tarikh));
-        totalShown += items.length;
-
-        const label = msMY.format(new Date(`${key}-01T00:00:00`));
-
-        const section = document.createElement('section');
-        section.id = `group-${key}`;
-        section.className = 'space-y-4';
-
-        const h = document.createElement('h2');
-        h.className = 'text-xl font-semibold text-gray-800 border-b pb-1';
-        h.textContent = label;
-        section.appendChild(h);
-
-        items.forEach(activity=>{
-          const card = document.createElement('div');
-          card.className = 'bg-white p-4 rounded-lg shadow-sm border border-gray-200';
-
-          const tagColor = activity.medium_aktiviti === 'Bimbingan'
-            ? 'bg-green-100 text-green-800'
-            : 'bg-blue-100 text-blue-800';
-          const tagText = activity.medium_aktiviti || 'Lain-lain';
-
-          const actionsHTML = editEnabled ? `
-            <div class="flex items-center space-x-2 no-print">
-              <button onclick='openEditModal(${JSON.stringify(activity)})' class="text-blue-500 hover:text-blue-700 p-1" title="Edit" aria-label="Edit">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              </button>
-              <button onclick='openCopyModal(${JSON.stringify(activity)})' class="text-purple-600 hover:text-purple-800 p-1" title="Salin" aria-label="Salin">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              </button>
-              <button onclick="deleteActivity('${activity.id}')" class="text-red-500 hover:text-red-700 p-1" title="Padam" aria-label="Padam">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-              </button>
-            </div>` : ``;
-
-          card.innerHTML = `
-            <div class="flex justify-between items-start">
-              <div>
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${tagColor}">${tagText}</span>
-                <h3 class="font-bold text-lg text-gray-800 mt-2">${activity.tajuk || 'Tiada Tajuk'}</h3>
-                <p class="text-sm text-gray-600">${fullDate(activity.tarikh)}</p>
-                <p class="text-sm text-gray-500">${activity.masa || 'Tempoh masa tidak dinyatakan'}</p>
-                <p class="mt-2 text-gray-700">${activity.tempat || 'Tempat tidak dinyatakan'}</p>
-                <p class="text-sm text-gray-700"><span class="font-medium">Nama Guru:</span> ${activity.nama_guru || '-'}</p>
-                <p class="text-sm text-gray-700" style="overflow-wrap: break-word;"><span class="font-medium">Impak/Catatan:</span> ${linkifyText(activity.impak_catatan)}</p>
-                <p class="text-sm text-gray-700" style="overflow-wrap: break-word;"><span class="font-medium">Tindak Susul:</span> ${linkifyText(activity.tindak_susul)}</p>
-              </div>
-              ${actionsHTML}
-            </div>
-          `;
-
-          section.appendChild(card);
-        });
-
-        activityListEl.appendChild(section);
-      });
-
-      const filterLabel = currentTypeFilter !== '__ALL__' ? ` (Ditapis: ${currentTypeFilter})` : '';
-      const metaText = `Dipaparkan <b>${totalShown}</b> rekod untuk ${scopeLabel}${filterLabel}.`;
-      
-      listMetaEl.innerHTML = metaText;
-      listMetaMobileEl.innerHTML = metaText;
-    }
-
-    function renderHeatmapYear(){
-      if(!heatmapGridEl) return;
-      const months = Array.from({length:12}, (_,i)=>({
-        m:i+1, label: monthLabelMY.format(new Date(currentYear, i, 1)),
-        bimbingan:0, aktiviti:0, total:0
-      }));
-
-      cacheData.forEach(r=>{
-        if(!r.tarikh || !isCurrentYear(r.tarikh)) return;
-        const idx = new Date(r.tarikh).getMonth();
-        if(r.medium_aktiviti === 'Bimbingan') months[idx].bimbingan++;
-        else if(r.medium_aktiviti === 'Aktiviti') months[idx].aktiviti++;
-        months[idx].total++;
-      });
-
-      const maxTotal = Math.max(1, ...months.map(x=>x.total));
-      heatmapGridEl.innerHTML = months.map(x=>{
-        const intensity = x.total === 0 ? 0 : x.total / maxTotal;
-        const bg = `rgba(212,175,55,${0.06 + intensity*0.28})`;
-        const border = x.total>0 ? 'border-yellow-300' : 'border-gray-200';
-        return `
-          <div class="rounded-xl p-3 border ${border}" style="background:${bg}">
-            <div class="text-sm font-medium text-gray-800">${x.label}</div>
-            <div class="mt-2 flex items-center gap-2">
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">Bimbingan: ${x.bimbingan}</span>
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">Aktiviti: ${x.aktiviti}</span>
-            </div>
-            <div class="mt-1 text-xs text-gray-600">Jumlah: ${x.total}</div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    async function loadActivities(){
-      try{
-        const { data: allDocs, error } = await supabaseClient
-          .from('aktiviti')
-          .select('*')
-          .order('tarikh', { ascending: true });
-        
-        if (error) throw error;
-
-        cacheData = allDocs.map(doc => ({
-          id: doc.id,
-          tarikh: doc.tarikh,
-          tajuk: doc.tajuk,
-          masa: doc.masa,
-          tempat: doc.tempat,
-          medium_aktiviti: doc.medium_aktiviti,
-          nama_guru: doc.nama_guru,
-          impak_catatan: doc.impak_catatan,
-          tindak_susul: doc.tindak_susul
-        }));
-
-        monthIndex = buildMonthIndex(cacheData);
-        const selected = getSelectedMonth();
-        renderMonthOptions(selected);
-        renderActivities(); // Render awal
-
-        if(document.getElementById('tab-heatmap').classList.contains('active')) renderHeatmapYear();
-      }catch(error){
-        console.error(error);
-        Swal.fire('Ralat', error.message || 'Gagal memuatkan data aktiviti.', 'error');
-      }
-    }
-
-    // EVENT LISTENER: Tukar Bulan
-    monthJumpEl?.addEventListener('change', (e)=>{
-      const val = e.target.value;
-      setSelectedMonth(val);
-      
-      // AUTO UPDATE: Jana hari berdasarkan data bulan baru
-      updateDayOptions(val);
-      
-      // Render semula senarai
-      renderActivities();
-      
-      if(val !== '__ALL__'){
-        setTimeout(() => {
-            const sec = document.getElementById(`group-${val}`);
-            if(sec) sec.scrollIntoView({ behavior:'smooth', block:'start' });
-        }, 100);
-      } else {
-        window.scrollTo({ top:0, behavior:'smooth' });
-      }
-    });
-
-    // EVENT LISTENER: Tukar Hari
-    dayJumpEl?.addEventListener('change', (e)=>{
-      renderActivities();
-    });
-
-    const EDIT_PASSWORD = 'pkgag';
-    let editEnabled = sessionStorage.getItem('editEnabled') === 'true';
-    const toggleBtn = document.getElementById('toggle-edit-btn');
-    const editStateLabel = document.getElementById('edit-state-label');
-    function refreshEditStateUI(){
-      if(!toggleBtn) return;
-      editStateLabel.textContent = editEnabled ? 'Terbuka' : 'Terkunci';
-      toggleBtn.className = 'px-3 py-2 rounded-md border text-sm font-medium ' +
-        (editEnabled ? 'bg-green-50 border-green-300 text-green-800 hover:bg-green-100'
-                     : 'bg-white hover:bg-gray-50');
-      renderActivities();
-    }
-    toggleBtn?.addEventListener('click', async ()=>{
-      if(editEnabled){ editEnabled=false; sessionStorage.setItem('editEnabled','false'); refreshEditStateUI(); return; }
-      const { value: pass } = await Swal.fire({
-        title:'Masukkan Kata Laluan',
-        input:'password',
-        inputLabel:'Untuk membuka mod edit',
-        inputPlaceholder:'Kata laluan',
-        confirmButtonText:'Sahkan',
-        showCancelButton:true
-      });
-      if(pass===EDIT_PASSWORD){ editEnabled=true; sessionStorage.setItem('editEnabled','true'); refreshEditStateUI(); }
-      else if(pass!==undefined){ Swal.fire('Gagal','Kata laluan tidak sah.','error'); }
-    });
-
-    const sh = document.getElementById('stickyHeader');
-    const onScroll = ()=> sh.classList.toggle('scrolled', window.scrollY > 8);
-    document.addEventListener('scroll', onScroll, { passive:true });
-
-    function switchTab(tabName){
-      document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
-      document.querySelectorAll('.tab-button').forEach(b=>b.classList.remove('active'));
-      document.getElementById(`tab-${tabName}`).classList.add('active');
-      document.getElementById(`tab-${tabName}-btn`).classList.add('active');
-      if(tabName==='list'){ loadActivities(); }
-      if(tabName==='heatmap'){ renderHeatmapYear(); }
-    }
-
-    async function deleteActivity(id){
-      if(!editEnabled){
-        Swal.fire('Terkunci','Buka mod edit dahulu.','info');
-        return;
-      }
-      const result = await Swal.fire({
-        title:'Anda Pasti?',
-        text:'Aktiviti yang dipadam tidak boleh dikembalikan.',
-        icon:'warning',
-        showCancelButton:true,
-        confirmButtonColor:'#3085d6',
-        cancelButtonColor:'#d33',
-        confirmButtonText:'Ya, padam!',
-        cancelButtonText:'Batal'
-      });
-      if(!result.isConfirmed) return;
-
-      try{
-        const { error } = await supabaseClient
-          .from('aktiviti')
-          .delete()
-          .eq('id', id);
-          
-        if (error) throw error; 
-
-        Swal.fire('Berjaya', 'Aktiviti telah dipadam.', 'success');
-        loadActivities(); 
-      }catch(error){
-        console.error(error);
-        Swal.fire('Gagal', error.message || 'Aktiviti gagal dipadam.', 'error');
-      }
-    }
-
-    const addForm = document.getElementById('add-activity-form');
-    addForm?.addEventListener('submit', async (event)=>{
-      event.preventDefault();
-      const payload = {
-        medium_aktiviti: document.getElementById('medium_aktiviti').value,
-        tajuk:           document.getElementById('tajuk').value,
-        tarikh:          document.getElementById('tarikh').value,
-        masa:            document.getElementById('masa').value,
-        tempat:          document.getElementById('tempat').value,
-        nama_guru:       document.getElementById('nama_guru').value,
-        impak_catatan:   document.getElementById('impak_catatan').value,
-        tindak_susul:    document.getElementById('tindak_susul').value
-      };
-      try{
-        const { error } = await supabaseClient
-          .from('aktiviti')
-          .insert([payload]);
-          
-        if (error) throw error; 
-
-        Swal.fire('Berjaya', 'Aktiviti baharu telah ditambah.', 'success');
-        addForm.reset();
-        loadActivities(); 
-      }catch(error){
-        console.error(error);
-        Swal.fire('Gagal', error.message || 'Sila pastikan semua medan diisi dengan betul.', 'error');
-      }
-    });
-
-    // -------------------------------------------------------------
-    // LOGIK MODAL: EDIT & SALIN
-    // -------------------------------------------------------------
-    
-    const editModal = document.getElementById('edit-modal');
-    const modalTitleEl = document.getElementById('modal-title');
-    const saveChangesBtn = document.getElementById('save-changes-btn');
-
-    function populateForm(activity) {
-      document.getElementById('edit-activity-id').value = activity.id;
-      document.getElementById('edit-medium_aktiviti').value = activity.medium_aktiviti || '';
-      document.getElementById('edit-tajuk').value = activity.tajuk || '';
-      document.getElementById('edit-tarikh').value = activity.tarikh ? String(activity.tarikh).slice(0,10) : '';
-      document.getElementById('edit-masa').value = activity.masa || '';
-      document.getElementById('edit-tempat').value = activity.tempat || '';
-      document.getElementById('edit-nama_guru').value = activity.nama_guru || '';
-      document.getElementById('edit-impak_catatan').value = activity.impak_catatan || '';
-      document.getElementById('edit-tindak_susul').value = activity.tindak_susul || '';
-    }
-
-    function openEditModal(activity){
-      if(!editEnabled){ Swal.fire('Terkunci','Buka mod edit dahulu.','info'); return; }
-      
-      isCopyMode = false;
-      modalTitleEl.textContent = 'Kemas Kini Aktiviti';
-      saveChangesBtn.textContent = 'Simpan Perubahan';
-      
-      populateForm(activity);
-      editModal.classList.remove('hidden');
-      document.body.style.overflow = 'hidden';
-    }
-
-    function openCopyModal(activity){
-      if(!editEnabled){ Swal.fire('Terkunci','Buka mod edit dahulu.','info'); return; }
-      
-      isCopyMode = true;
-      modalTitleEl.textContent = 'Salin Aktiviti Baharu';
-      saveChangesBtn.textContent = 'Simpan Salinan';
-
-      populateForm(activity);
-      editModal.classList.remove('hidden');
-      document.body.style.overflow = 'hidden';
-    }
-
-    function closeModal(){
-      editModal.classList.add('hidden');
-      document.body.style.overflow = '';
-    }
-    document.getElementById('close-modal-btn')?.addEventListener('click', closeModal);
-
-    saveChangesBtn?.addEventListener('click', async ()=>{
-      if(!editEnabled){ Swal.fire('Terkunci','Buka mod edit dahulu.','info'); return; }
-
-      const id = document.getElementById('edit-activity-id').value;
-      const payload = {
-        medium_aktiviti: document.getElementById('edit-medium_aktiviti').value,
-        tajuk:           document.getElementById('edit-tajuk').value,
-        tarikh:          document.getElementById('edit-tarikh').value,
-        masa:            document.getElementById('edit-masa').value,
-        tempat:          document.getElementById('edit-tempat').value,
-        nama_guru:       document.getElementById('edit-nama_guru').value,
-        impak_catatan:   document.getElementById('edit-impak_catatan').value,
-        tindak_susul:    document.getElementById('edit-tindak_susul').value
-      };
-
-      try {
-        if (isCopyMode) {
-          const { error } = await supabaseClient.from('aktiviti').insert([payload]);
-          if (error) throw error;
-          Swal.fire('Berjaya', 'Salinan aktiviti telah ditambah.', 'success');
-        } else {
-          const { error } = await supabaseClient.from('aktiviti').update(payload).eq('id', id);
-          if (error) throw error;
-          Swal.fire('Berjaya', 'Aktiviti telah dikemas kini.', 'success');
-        }
-
-        closeModal();
-        loadActivities();
-      } catch(error) {
-        console.error(error);
-        Swal.fire('Gagal', error.message || 'Operasi gagal.', 'error');
-      }
-    });
-
-    document.getElementById('edit-modal')?.addEventListener('click', (e)=>{
-      if(e.target.id==='edit-modal') closeModal();
-    });
-
-    document.addEventListener('DOMContentLoaded', async ()=>{
-      setSelectedMonth(monthKey(new Date()));
-      await loadActivities();
-      refreshEditStateUI();
-      onScroll();
-    });
-  </script>
+  <script src="assets/js/app.js"></script> 
 </body>
 </html>
