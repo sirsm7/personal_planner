@@ -134,9 +134,9 @@ async function initApp() {
 
 async function fetchData() {
     try {
-        // PERUBAHAN: Menggunakan table 'aktiviti_rows'
+        // PERUBAHAN: Menggunakan table 'aktiviti'
         let { data, error } = await supabaseClient
-            .from('aktiviti_rows')
+            .from('aktiviti')
             .select('*')
             .order('tarikh', { ascending: false });
 
@@ -157,7 +157,7 @@ async function fetchData() {
     } catch (err) {
         console.error(err);
         // Jika error 404, mungkin schema belum set atau table salah nama
-        Swal.fire('Ralat', 'Gagal memuatkan data. Pastikan table "aktiviti_rows" wujud dalam schema "rekod_aktiviti".', 'error');
+        Swal.fire('Ralat', 'Gagal memuatkan data. Pastikan table "aktiviti" wujud dalam schema "rekod_aktiviti".', 'error');
     }
 }
 
@@ -502,8 +502,8 @@ if(addForm) {
             tindak_susul: document.getElementById('tindak_susul').value
         };
 
-        // PERUBAHAN: Guna table 'aktiviti_rows'
-        const { error } = await supabaseClient.from('aktiviti_rows').insert([finalPayload]);
+        // PERUBAHAN: Guna table 'aktiviti'
+        const { error } = await supabaseClient.from('aktiviti').insert([finalPayload]);
         if (error) {
             Swal.fire('Ralat', error.message, 'error');
         } else {
@@ -534,12 +534,12 @@ if(saveBtn) {
         };
 
         let error;
-        // PERUBAHAN: Guna table 'aktiviti_rows'
+        // PERUBAHAN: Guna table 'aktiviti'
         if (window.isCopyMode) {
-            const { error: err } = await supabaseClient.from('aktiviti_rows').insert([payload]);
+            const { error: err } = await supabaseClient.from('aktiviti').insert([payload]);
             error = err;
         } else {
-            const { error: err } = await supabaseClient.from('aktiviti_rows').update(payload).eq('id', id);
+            const { error: err } = await supabaseClient.from('aktiviti').update(payload).eq('id', id);
             error = err;
         }
 
@@ -638,8 +638,8 @@ window.deleteActivity = async function(id) {
     });
     
     if (res.isConfirmed) {
-        // PERUBAHAN: Guna table 'aktiviti_rows'
-        const { error } = await supabaseClient.from('aktiviti_rows').delete().eq('id', id);
+        // PERUBAHAN: Guna table 'aktiviti'
+        const { error } = await supabaseClient.from('aktiviti').delete().eq('id', id);
         if (error) Swal.fire('Gagal', error.message, 'error');
         else {
             Swal.fire('Berjaya', 'Rekod telah dipadam.', 'success');
