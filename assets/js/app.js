@@ -2,8 +2,8 @@
 // 1. KONFIGURASI SUPABASE & PEMBOLEHUBAH GLOBAL
 // =================================================================
 
-const SUPABASE_URL = 'https://umzekpsayclptmhgzotf.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVtemVrcHNheWNscHRtaGd6b3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjMwNTAsImV4cCI6MjA3ODIzOTA1MH0.FbV1ESJrckyJ4kT4hR3DKh01GHeHoCTEfU5kgPWmIRs';
+const SUPABASE_URL = 'https://appppdag.cloud';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzYzMzczNjQ1LCJleHAiOjIwNzg3MzM2NDV9.vZOedqJzUn01PjwfaQp7VvRzSm4aRMr21QblPDK8AoY';
 
 // Guna nama 'supabaseClient' untuk elak konflik dengan CDN global
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
