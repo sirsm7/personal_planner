@@ -2,11 +2,22 @@
 // 1. KONFIGURASI SUPABASE & PEMBOLEHUBAH GLOBAL
 // =================================================================
 
+// URL Server Hostinger Anda
 const SUPABASE_URL = 'https://appppdag.cloud';
+
+// Kunci ANON (Public Key) - Pastikan ini sama dengan fail .env anda
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzYzMzczNjQ1LCJleHAiOjIwNzg3MzM2NDV9.vZOedqJzUn01PjwfaQp7VvRzSm4aRMr21QblPDK8AoY';
 
-// Guna nama 'supabaseClient' untuk elak konflik dengan CDN global
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// INI BAHAGIAN PALING PENTING: Setting Schema 'rekod_aktiviti'
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+        persistSession: true, // Simpan session supaya tak logout bila refresh
+        autoRefreshToken: true,
+    },
+    db: {
+        schema: 'rekod_aktiviti' // <--- Kita paksa app cari dalam schema ini
+    }
+});
 
 // State Data
 let allData = [];
@@ -123,8 +134,9 @@ async function initApp() {
 
 async function fetchData() {
     try {
+        // PERUBAHAN: Menggunakan table 'aktiviti_rows'
         let { data, error } = await supabaseClient
-            .from('aktiviti')
+            .from('aktiviti_rows')
             .select('*')
             .order('tarikh', { ascending: false });
 
@@ -144,7 +156,8 @@ async function fetchData() {
 
     } catch (err) {
         console.error(err);
-        Swal.fire('Ralat', 'Gagal memuatkan data dari pangkalan data.', 'error');
+        // Jika error 404, mungkin schema belum set atau table salah nama
+        Swal.fire('Ralat', 'Gagal memuatkan data. Pastikan table "aktiviti_rows" wujud dalam schema "rekod_aktiviti".', 'error');
     }
 }
 
@@ -489,7 +502,8 @@ if(addForm) {
             tindak_susul: document.getElementById('tindak_susul').value
         };
 
-        const { error } = await supabaseClient.from('aktiviti').insert([finalPayload]);
+        // PERUBAHAN: Guna table 'aktiviti_rows'
+        const { error } = await supabaseClient.from('aktiviti_rows').insert([finalPayload]);
         if (error) {
             Swal.fire('Ralat', error.message, 'error');
         } else {
@@ -520,12 +534,12 @@ if(saveBtn) {
         };
 
         let error;
-        // Jika Salin (Insert New), Jika Edit (Update Existing)
+        // PERUBAHAN: Guna table 'aktiviti_rows'
         if (window.isCopyMode) {
-            const { error: err } = await supabaseClient.from('aktiviti').insert([payload]);
+            const { error: err } = await supabaseClient.from('aktiviti_rows').insert([payload]);
             error = err;
         } else {
-            const { error: err } = await supabaseClient.from('aktiviti').update(payload).eq('id', id);
+            const { error: err } = await supabaseClient.from('aktiviti_rows').update(payload).eq('id', id);
             error = err;
         }
 
@@ -624,7 +638,8 @@ window.deleteActivity = async function(id) {
     });
     
     if (res.isConfirmed) {
-        const { error } = await supabaseClient.from('aktiviti').delete().eq('id', id);
+        // PERUBAHAN: Guna table 'aktiviti_rows'
+        const { error } = await supabaseClient.from('aktiviti_rows').delete().eq('id', id);
         if (error) Swal.fire('Gagal', error.message, 'error');
         else {
             Swal.fire('Berjaya', 'Rekod telah dipadam.', 'success');
