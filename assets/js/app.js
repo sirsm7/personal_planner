@@ -382,20 +382,20 @@ function renderActivities() {
                     <span class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide ${badgeColor}">${act.medium_aktiviti}</span>
                     <span class="text-xs font-mono text-gray-400">${fullDate(act.tarikh)}</span>
                 </div>
-                <h4 class="text-lg font-bold text-gray-900 leading-snug mb-2">${act.tajuk || '(Tiada Tajuk)'}</h4>
+                <h4 class="text-lg font-bold text-gray-900 leading-snug mb-2 uppercase">${act.tajuk || '(Tiada Tajuk)'}</h4>
                 <div class="text-sm text-gray-600 space-y-1 mb-3">
-                    <p class="flex items-center gap-2"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> ${act.masa || '-'}</p>
-                    <p class="flex items-center gap-2"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> ${act.tempat || '-'}</p>
-                    ${act.nama_guru ? `<p class="flex items-center gap-2"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg> ${act.nama_guru}</p>` : ''}
+                    <p class="flex items-center gap-2 uppercase"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> ${act.masa || '-'}</p>
+                    <p class="flex items-center gap-2 uppercase"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> ${act.tempat || '-'}</p>
+                    ${act.nama_guru ? `<p class="flex items-center gap-2 uppercase"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg> ${act.nama_guru}</p>` : ''}
                 </div>
                 <div class="bg-gray-50 p-3 rounded-lg text-sm border border-gray-100">
                     <div class="mb-2">
                         <span class="text-xs font-bold text-gray-400 uppercase">Impak / Catatan</span>
-                        <div class="text-gray-700 mt-0.5" style="overflow-wrap:anywhere;">${linkify(act.impak_catatan)}</div>
+                        <div class="text-gray-700 mt-0.5 uppercase" style="overflow-wrap:anywhere;">${linkify(act.impak_catatan)}</div>
                     </div>
                     <div>
                         <span class="text-xs font-bold text-gray-400 uppercase">Tindak Susul</span>
-                        <div class="text-gray-700 mt-0.5" style="overflow-wrap:anywhere;">${linkify(act.tindak_susul)}</div>
+                        <div class="text-gray-700 mt-0.5 uppercase" style="overflow-wrap:anywhere;">${linkify(act.tindak_susul)}</div>
                     </div>
                 </div>
                 ${actionButtons}
@@ -490,16 +490,16 @@ if(addForm) {
         e.preventDefault();
         if (!currentUser) return Swal.fire('Akses Ditolak', 'Sila log masuk dahulu.', 'warning');
 
-        // Kutip data form manual untuk kepastian
+        // Kutip data form manual untuk kepastian (Disuntik dengan kaedah toUpperCase)
         const finalPayload = {
             medium_aktiviti: document.getElementById('medium_aktiviti').value,
-            tajuk: document.getElementById('tajuk').value,
+            tajuk: document.getElementById('tajuk').value.toUpperCase(),
             tarikh: document.getElementById('tarikh').value,
-            masa: document.getElementById('masa').value,
-            tempat: document.getElementById('tempat').value,
-            nama_guru: document.getElementById('nama_guru').value,
-            impak_catatan: document.getElementById('impak_catatan').value,
-            tindak_susul: document.getElementById('tindak_susul').value
+            masa: document.getElementById('masa').value.toUpperCase(),
+            tempat: document.getElementById('tempat').value.toUpperCase(),
+            nama_guru: document.getElementById('nama_guru').value.toUpperCase(),
+            impak_catatan: safeUpperCase(document.getElementById('impak_catatan').value),
+            tindak_susul: safeUpperCase(document.getElementById('tindak_susul').value)
         };
 
         // PERUBAHAN: Guna table 'aktiviti'
@@ -524,13 +524,13 @@ if(saveBtn) {
         const id = document.getElementById('edit-activity-id').value;
         const payload = {
             medium_aktiviti: document.getElementById('edit-medium_aktiviti').value,
-            tajuk: document.getElementById('edit-tajuk').value,
+            tajuk: document.getElementById('edit-tajuk').value.toUpperCase(),
             tarikh: document.getElementById('edit-tarikh').value,
-            masa: document.getElementById('edit-masa').value,
-            tempat: document.getElementById('edit-tempat').value,
-            nama_guru: document.getElementById('edit-nama_guru').value,
-            impak_catatan: document.getElementById('edit-impak_catatan').value,
-            tindak_susul: document.getElementById('edit-tindak_susul').value
+            masa: document.getElementById('edit-masa').value.toUpperCase(),
+            tempat: document.getElementById('edit-tempat').value.toUpperCase(),
+            nama_guru: document.getElementById('edit-nama_guru').value.toUpperCase(),
+            impak_catatan: safeUpperCase(document.getElementById('edit-impak_catatan').value),
+            tindak_susul: safeUpperCase(document.getElementById('edit-tindak_susul').value)
         };
 
         let error;
@@ -646,6 +646,20 @@ window.deleteActivity = async function(id) {
             await initApp();
         }
     }
+}
+
+// Utiliti Huruf Besar Selamat (Elak URL rosak)
+function safeUpperCase(text) {
+    if (!text) return '';
+    const urlRegex = /(https?:\/\/[^\s<]+)/gi;
+    const parts = text.split(urlRegex);
+    return parts.map(part => {
+        // Uji jika ia adalah permulaan pautan HTTP/HTTPS
+        if (/^https?:\/\//i.test(part)) {
+            return part; // Kekalkan kes asal untuk URL
+        }
+        return part.toUpperCase(); // Tukar huruf besar untuk teks biasa
+    }).join('');
 }
 
 // Utiliti Linkify (Tukar teks URL jadi Link)
