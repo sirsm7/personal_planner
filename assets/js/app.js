@@ -1,686 +1,940 @@
-// =================================================================
-// 1. KONFIGURASI SUPABASE & PEMBOLEHUBAH GLOBAL
-// =================================================================
-
-// URL Server Hostinger Anda
-const SUPABASE_URL = 'https://app.tech4ag.my';
-
-// Kunci ANON (Public Key) - Pastikan ini sama dengan fail .env anda
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzYzMzczNjQ1LCJleHAiOjIwNzg3MzM2NDV9.vZOedqJzUn01PjwfaQp7VvRzSm4aRMr21QblPDK8AoY';
-
-// INI BAHAGIAN PALING PENTING: Setting Schema 'rekod_aktiviti'
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-        persistSession: true, // Simpan session supaya tak logout bila refresh
-        autoRefreshToken: true,
-    },
-    db: {
-        schema: 'rekod_aktiviti' // <--- Kita paksa app cari dalam schema ini
-    }
-});
-
-// State Data
 let allData = [];
 let yearsAvailable = [];
 let currentUser = null;
+let supabaseClient = null;
 
-// Filter State (Default)
 let filterYear = new Date().getFullYear();
 let filterMonth = '__ALL__';
 let filterDay = '__ALL__';
 let filterType = '__ALL__';
 
-// Helper Format Tarikh (Bahasa Melayu)
 const msMY = new Intl.DateTimeFormat('ms-MY', { month: 'long' });
-const fullDate = (d) => new Date(d).toLocaleDateString('ms-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-const getMonthKey = (d) => { const dt = new Date(d); return `${String(dt.getMonth() + 1).padStart(2, '0')}`; };
+const getMonthKey = function (d) {
+  const dt = new Date(d);
+  return String(dt.getMonth() + 1).padStart(2, '0');
+};
 
-// =================================================================
-// 2. LOGIK PENGESAHAN (AUTH / LOGIN)
-// =================================================================
-
-const authContainer = document.getElementById('auth-container');
 const btnShowLogin = document.getElementById('btn-show-login');
 const btnLogout = document.getElementById('btn-logout');
 const tabAddBtn = document.getElementById('tab-add-btn');
-
-// Pendengar Status Sesi (Session Listener)
-supabaseClient.auth.onAuthStateChange((event, session) => {
-    currentUser = session?.user || null;
-    updateAuthUI();
-    renderActivities(); // Render semula supaya butang Edit/Padam muncul/hilang
-});
+const tabMigrationBtn = document.getElementById('tab-migration-btn');
 
 function updateAuthUI() {
-    if (currentUser) {
-        // Jika Login
-        if(btnShowLogin) btnShowLogin.classList.add('hidden');
-        if(btnLogout) btnLogout.classList.remove('hidden');
-        if(tabAddBtn) tabAddBtn.classList.remove('hidden');
-    } else {
-        // Jika Pelawat (Guest)
-        if(btnShowLogin) btnShowLogin.classList.remove('hidden');
-        if(btnLogout) btnLogout.classList.add('hidden');
-        if(tabAddBtn) tabAddBtn.classList.add('hidden');
-        
-        // Jika pengguna berada di tab 'Tambah', alihkan ke 'Senarai'
-        const tabAdd = document.getElementById('tab-add');
-        if(tabAdd && tabAdd.classList.contains('active')){
-            window.switchTab('list');
-        }
+  if (currentUser) {
+    if (btnShowLogin) btnShowLogin.classList.add('hidden');
+    if (btnLogout) btnLogout.classList.remove('hidden');
+    if (tabAddBtn) tabAddBtn.classList.remove('hidden');
+    if (tabMigrationBtn) tabMigrationBtn.classList.remove('hidden');
+  } else {
+    if (btnShowLogin) btnShowLogin.classList.remove('hidden');
+    if (btnLogout) btnLogout.classList.add('hidden');
+    if (tabAddBtn) tabAddBtn.classList.add('hidden');
+    if (tabMigrationBtn) tabMigrationBtn.classList.add('hidden');
+
+    const tabAdd = document.getElementById('tab-add');
+    const tabMigration = document.getElementById('tab-migration');
+    if (tabAdd && tabAdd.classList.contains('active')) {
+      window.switchTab('list');
     }
+    if (tabMigration && tabMigration.classList.contains('active')) {
+      window.switchTab('list');
+    }
+  }
 }
-
-// Log Masuk (Submit Form)
-const loginForm = document.getElementById('login-form');
-if(loginForm) {
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const email = document.getElementById('login-email').value;
-        const pass = document.getElementById('login-password').value;
-        
-        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
-        if (error) {
-            Swal.fire('Gagal', 'Emel atau kata laluan salah.', 'error');
-        } else {
-            window.closeLoginModal();
-            Swal.fire('Berjaya', 'Selamat kembali, Tuan!', 'success');
-            loginForm.reset();
-        }
-    });
-}
-
-// Log Keluar
-if(btnLogout) {
-    btnLogout.addEventListener('click', async () => {
-        await supabaseClient.auth.signOut();
-        Swal.fire('Log Keluar', 'Anda telah log keluar.', 'info');
-    });
-}
-
-// Buka Modal Login
-if(btnShowLogin) {
-    btnShowLogin.addEventListener('click', () => {
-        const modal = document.getElementById('login-modal');
-        if(modal) modal.classList.remove('hidden');
-    });
-}
-
-// =================================================================
-// 3. PENGURUSAN DATA & PENAPIS (DATA & FILTERS)
-// =================================================================
 
 async function initApp() {
-    await fetchData();
+  try {
+    const env = await window.ENV_READY;
+    supabaseClient = window.supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true },
+      db: { schema: env.SUPABASE_SCHEMA }
+    });
+
+    supabaseClient.auth.onAuthStateChange(function (event, session) {
+      currentUser = session && session.user ? session.user : null;
+      updateAuthUI();
+      renderActivities();
+    });
+
+    if (window.IdbCache && typeof window.IdbCache.init === 'function') {
+      await window.IdbCache.init();
+    }
+
+    await loadInitialData();
     setupYearDropdown();
     setupFilterListeners();
-    
-    // Tetapkan tahun filter kepada tahun terkini yang ada dalam data
-    if(yearsAvailable.length > 0) {
-        filterYear = Math.max(...yearsAvailable);
-    } else {
-        filterYear = new Date().getFullYear();
-    }
-    
-    // Set nilai dropdown tahun
-    const yearJump = document.getElementById('year-jump');
-    if(yearJump) yearJump.value = filterYear;
-    
-    // Jana dropdown bulan dan render
-    updateMonthOptions(); 
+    updateMonthOptions();
     renderActivities();
     renderHeatmap();
+
+    if (window.RealtimeSync && typeof window.RealtimeSync.start === 'function') {
+      window.RealtimeSync.start(supabaseClient, {
+        onUpsert: function () { },
+        onDelete: function () { },
+        onStatusChange: updateRealtimeStatusUI
+      });
+    }
+
+    window.addEventListener('pap:realtime-change', function () {
+      refreshDataSilently();
+    });
+
+  } catch (err) {
+    if (window.Swal) {
+      window.Swal.fire('Ralat Permulaan', err.message, 'error');
+    }
+  }
 }
 
-async function fetchData() {
-    try {
-        // PERUBAHAN: Menggunakan table 'aktiviti'
-        let { data, error } = await supabaseClient
-            .from('aktiviti')
-            .select('*')
-            .order('tarikh', { ascending: false });
+async function fetchFromSupabase() {
+  const response = await supabaseClient
+    .from('aktiviti')
+    .select('*')
+    .order('tarikh', { ascending: false });
+  if (response.error) {
+    throw response.error;
+  }
+  return response.data || [];
+}
 
-        if (error) throw error;
-        allData = data || [];
-
-        // Dapatkan senarai tahun unik dari data
-        const yearsSet = new Set(allData.map(item => new Date(item.tarikh).getFullYear()));
-        yearsAvailable = Array.from(yearsSet).sort((a, b) => b - a); 
-        
-        // Pastikan tahun semasa sentiasa ada dalam senarai
-        const currentY = new Date().getFullYear();
-        if(!yearsAvailable.includes(currentY)) {
-            yearsAvailable.unshift(currentY);
-            yearsAvailable.sort((a, b) => b - a);
-        }
-
-    } catch (err) {
-        console.error(err);
-        // Jika error 404, mungkin schema belum set atau table salah nama
-        Swal.fire('Ralat', 'Gagal memuatkan data. Pastikan table "aktiviti" wujud dalam schema "rekod_aktiviti".', 'error');
+async function loadInitialData() {
+  try {
+    if (window.IdbCache && typeof window.IdbCache.getWithSWR === 'function') {
+      const cacheResult = await window.IdbCache.getWithSWR(fetchFromSupabase, { ttlMs: 300000 });
+      allData = cacheResult.items;
+      if (window.RealtimeSync && typeof window.RealtimeSync.seedTimestamps === 'function') {
+        window.RealtimeSync.seedTimestamps(allData);
+      }
+    } else {
+      allData = await fetchFromSupabase();
     }
+
+    const yearsSet = new Set(allData.map(function (item) {
+      return new Date(item.tarikh).getFullYear();
+    }));
+    yearsAvailable = Array.from(yearsSet).sort(function (a, b) {
+      return b - a;
+    });
+
+    const currentY = new Date().getFullYear();
+    if (!yearsAvailable.includes(currentY)) {
+      yearsAvailable.unshift(currentY);
+      yearsAvailable.sort(function (a, b) {
+        return b - a;
+      });
+    }
+    if (yearsAvailable.length > 0 && filterYear === new Date().getFullYear() && !yearsAvailable.includes(filterYear)) {
+      filterYear = Math.max.apply(null, yearsAvailable);
+    }
+  } catch (_) {
+    if (window.Swal) {
+      window.Swal.fire('Ralat', 'Gagal memuatkan data dari pelayan.', 'error');
+    }
+  }
+}
+
+async function refreshDataSilently() {
+  try {
+    if (window.IdbCache && typeof window.IdbCache.getCachedActivities === 'function') {
+      const cacheResult = await window.IdbCache.getCachedActivities();
+      allData = cacheResult.items;
+    }
+    renderActivities();
+    renderHeatmap();
+    updateMonthOptions();
+  } catch (_) {
+  }
+}
+
+function updateRealtimeStatusUI(status) {
+  const dot = document.getElementById('realtime-status-dot');
+  const text = document.getElementById('realtime-status-text');
+  if (!dot || !text) return;
+
+  dot.className = 'status-dot';
+  if (status === 'SUBSCRIBED') {
+    dot.classList.add('connected');
+    text.textContent = window.__ENV.IS_OVERRIDE ? 'Mod Eksport' : 'Talian Aktif';
+    text.title = 'Bersambung ke: ' + window.__ENV.SUPABASE_SCHEMA;
+  } else if (status === 'SUBSCRIBING') {
+    dot.classList.add('connecting');
+    text.textContent = 'Menyambung...';
+  } else {
+    dot.classList.add('offline');
+    text.textContent = 'Luar Talian';
+  }
 }
 
 function setupYearDropdown() {
-    const yearSelect = document.getElementById('year-jump');
-    if(yearSelect) yearSelect.innerHTML = yearsAvailable.map(y => `<option value="${y}">${y}</option>`).join('');
+  const yearSelect = document.getElementById('year-jump');
+  if (yearSelect) {
+    yearSelect.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    yearsAvailable.forEach(function (y) {
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = y;
+      if (y === filterYear) {
+        opt.selected = true;
+      }
+      frag.appendChild(opt);
+    });
+    yearSelect.appendChild(frag);
+  }
 }
 
 function setupFilterListeners() {
-    const yearJump = document.getElementById('year-jump');
-    const monthJump = document.getElementById('month-jump');
-    const dayJump = document.getElementById('day-jump');
+  const yearJump = document.getElementById('year-jump');
+  const monthJump = document.getElementById('month-jump');
+  const dayJump = document.getElementById('day-jump');
 
-    // Ubah Tahun
-    if(yearJump) {
-        yearJump.addEventListener('change', (e) => {
-            filterYear = parseInt(e.target.value);
-            filterMonth = '__ALL__'; // Reset bulan
-            updateMonthOptions();    // Jana semula bulan ikut tahun baru
-            renderActivities();
-            renderHeatmap();
-        });
-    }
+  if (yearJump) {
+    yearJump.addEventListener('change', function (e) {
+      filterYear = parseInt(e.target.value, 10);
+      filterMonth = '__ALL__';
+      updateMonthOptions();
+      renderActivities();
+      renderHeatmap();
+    });
+  }
 
-    // Ubah Bulan
-    if(monthJump) {
-        monthJump.addEventListener('change', (e) => {
-            filterMonth = e.target.value;
-            updateDayOptions(); // Jana hari ikut bulan baru
-            renderActivities();
-        });
-    }
+  if (monthJump) {
+    monthJump.addEventListener('change', function (e) {
+      filterMonth = e.target.value;
+      updateDayOptions();
+      renderActivities();
+    });
+  }
 
-    // Ubah Hari
-    if(dayJump) {
-        dayJump.addEventListener('change', (e) => {
-            filterDay = e.target.value;
-            renderActivities();
-        });
-    }
+  if (dayJump) {
+    dayJump.addEventListener('change', function (e) {
+      filterDay = e.target.value;
+      renderActivities();
+    });
+  }
 }
 
-// FUNGSI PENTING: Jana Dropdown Bulan (FIXED)
 function updateMonthOptions() {
-    const monthSelect = document.getElementById('month-jump');
-    if(!monthSelect) return;
+  const monthSelect = document.getElementById('month-jump');
+  if (!monthSelect) return;
 
-    // Simpan nilai semasa (jika ada) untuk elak reset tak sengaja
-    const currentVal = filterMonth;
+  const currentVal = filterMonth;
+  monthSelect.innerHTML = '';
+  
+  const defaultOpt = document.createElement('option');
+  defaultOpt.value = '__ALL__';
+  defaultOpt.textContent = 'Semua Bulan';
+  monthSelect.appendChild(defaultOpt);
 
-    // Reset Dropdown
-    monthSelect.innerHTML = '<option value="__ALL__">Semua Bulan</option>';
-    
-    // Nama Bulan Bahasa Melayu
-    const monthNames = [
-        "Januari", "Februari", "Mac", "April", "Mei", "Jun",
-        "Julai", "Ogos", "September", "Oktober", "November", "Disember"
-    ];
+  const monthNames = [
+    "Januari", "Februari", "Mac", "April", "Mei", "Jun",
+    "Julai", "Ogos", "September", "Oktober", "November", "Disember"
+  ];
 
-    // Loop 12 Bulan
-    monthNames.forEach((name, index) => {
-        // Format bulan jadi "01", "02" ... "12"
-        const monthKey = String(index + 1).padStart(2, '0');
-        
-        // Kira bilangan aktiviti untuk Bulan & Tahun semasa
-        const count = allData.filter(item => {
-            const d = new Date(item.tarikh);
-            return d.getFullYear() === filterYear && 
-                   String(d.getMonth() + 1).padStart(2, '0') === monthKey;
-        }).length;
+  const frag = document.createDocumentFragment();
+  monthNames.forEach(function (name, index) {
+    const monthKey = String(index + 1).padStart(2, '0');
+    const count = allData.filter(function (item) {
+      const d = new Date(item.tarikh);
+      return d.getFullYear() === filterYear && String(d.getMonth() + 1).padStart(2, '0') === monthKey;
+    }).length;
 
-        // Cipta Option
-        const option = document.createElement('option');
-        option.value = monthKey;
-        
-        if (count > 0) {
-            option.text = `${name} (${count})`; // Cth: Oktober (5)
-            option.classList.add('font-semibold', 'text-gray-900');
-        } else {
-            option.text = name; // Cth: Januari
-            option.classList.add('text-gray-400');
-        }
-        
-        monthSelect.appendChild(option);
-    });
-
-    // Reset dropdown hari juga
-    updateDayOptions();
-
-    // Kembalikan nilai asal jika pengguna tak tukar tahun (UX improvement)
-    if(currentVal !== '__ALL__') {
-        monthSelect.value = currentVal;
-    }
-}
-
-// FUNGSI PENTING: Jana Dropdown Hari
-function updateDayOptions() {
-    const daySelect = document.getElementById('day-jump');
-    if(!daySelect) return;
-
-    daySelect.innerHTML = '<option value="__ALL__">Semua Hari</option>';
-    
-    // Jika tiada bulan dipilih, disable dropdown hari
-    if (filterMonth === '__ALL__') {
-        daySelect.disabled = true;
-        filterDay = '__ALL__';
-        return;
-    }
-
-    // Tapis data untuk bulan yang dipilih sahaja
-    const relevantData = allData.filter(item => {
-        const d = new Date(item.tarikh);
-        return d.getFullYear() === filterYear && getMonthKey(item.tarikh) === filterMonth;
-    });
-
-    // Dapatkan senarai hari unik
-    const days = [...new Set(relevantData.map(d => new Date(d.tarikh).getDate()))].sort((a,b)=>a-b);
-    
-    if (days.length === 0) {
-        daySelect.innerHTML = '<option value="">Tiada Data</option>';
-        daySelect.disabled = true;
+    const opt = document.createElement('option');
+    opt.value = monthKey;
+    if (count > 0) {
+      opt.textContent = name + ' (' + count + ')';
+      opt.className = 'font-semibold text-gray-900';
     } else {
-        days.forEach(d => {
-            const opt = document.createElement('option');
-            opt.value = d;
-            opt.textContent = d;
-            daySelect.appendChild(opt);
-        });
-        daySelect.disabled = false;
+      opt.textContent = name;
+      opt.className = 'text-gray-400';
     }
-    // Reset hari ke 'Semua' bila bulan bertukar
-    filterDay = '__ALL__'; 
-    daySelect.value = '__ALL__';
+    frag.appendChild(opt);
+  });
+  
+  monthSelect.appendChild(frag);
+  updateDayOptions();
+  if (currentVal !== '__ALL__') {
+    monthSelect.value = currentVal;
+  }
 }
 
-// =================================================================
-// 4. RENDERING (PAPARAN SENARAI & HEATMAP)
-// =================================================================
+function updateDayOptions() {
+  const daySelect = document.getElementById('day-jump');
+  if (!daySelect) return;
+
+  daySelect.innerHTML = '';
+  const defaultOpt = document.createElement('option');
+  defaultOpt.value = '__ALL__';
+  defaultOpt.textContent = 'Semua Hari';
+  daySelect.appendChild(defaultOpt);
+
+  if (filterMonth === '__ALL__') {
+    daySelect.disabled = true;
+    filterDay = '__ALL__';
+    return;
+  }
+
+  const relevantData = allData.filter(function (item) {
+    const d = new Date(item.tarikh);
+    return d.getFullYear() === filterYear && getMonthKey(item.tarikh) === filterMonth;
+  });
+
+  const daysSet = new Set(relevantData.map(function (d) {
+    return new Date(d.tarikh).getDate();
+  }));
+  const days = Array.from(daysSet).sort(function (a, b) { return a - b; });
+
+  if (days.length === 0) {
+    daySelect.innerHTML = '';
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.textContent = 'Tiada Data';
+    daySelect.appendChild(emptyOpt);
+    daySelect.disabled = true;
+  } else {
+    const frag = document.createDocumentFragment();
+    days.forEach(function (d) {
+      const opt = document.createElement('option');
+      opt.value = String(d);
+      opt.textContent = String(d);
+      frag.appendChild(opt);
+    });
+    daySelect.appendChild(frag);
+    daySelect.disabled = false;
+  }
+  
+  filterDay = '__ALL__';
+  daySelect.value = '__ALL__';
+}
+
+function linkifySafe(text) {
+  if (!text) {
+    const span = document.createElement('span');
+    span.textContent = '-';
+    return span;
+  }
+  
+  const container = document.createDocumentFragment();
+  const urlRegex = /(https?:\/\/[^\s<]+)/g;
+  const parts = String(text).split(urlRegex);
+  
+  parts.forEach(function(part) {
+    if (/^https?:\/\//i.test(part)) {
+      const anchor = document.createElement('a');
+      anchor.href = part;
+      anchor.target = '_blank';
+      anchor.className = 'text-blue-600 underline hover:text-blue-800 break-all';
+      anchor.textContent = part;
+      container.appendChild(anchor);
+    } else if (part) {
+      container.appendChild(document.createTextNode(part));
+    }
+  });
+  
+  return container;
+}
+
+function createTextElement(tag, className, content) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (content) el.textContent = content;
+  return el;
+}
+
+function createIcon(pathD) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'w-4 h-4 text-gray-400');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  
+  const paths = Array.isArray(pathD) ? pathD : [pathD];
+  paths.forEach(function(d) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  });
+  return svg;
+}
 
 function renderActivities() {
-    const listEl = document.getElementById('activity-list');
-    if(!listEl) return;
-    listEl.innerHTML = '';
+  const listEl = document.getElementById('activity-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
 
-    // Tapis Data Utama
-    let filtered = allData.filter(item => {
-        const d = new Date(item.tarikh);
-        const matchYear = d.getFullYear() === filterYear;
-        const matchMonth = filterMonth === '__ALL__' || getMonthKey(item.tarikh) === filterMonth;
-        const matchDay = filterDay === '__ALL__' || d.getDate() === parseInt(filterDay);
-        const matchType = filterType === '__ALL__' || item.medium_aktiviti === filterType;
-        return matchYear && matchMonth && matchDay && matchType;
-    });
+  const filtered = allData.filter(function (item) {
+    const d = new Date(item.tarikh);
+    const matchYear = d.getFullYear() === filterYear;
+    const matchMonth = filterMonth === '__ALL__' || getMonthKey(item.tarikh) === filterMonth;
+    const matchDay = filterDay === '__ALL__' || String(d.getDate()) === String(filterDay);
+    const matchType = filterType === '__ALL__' || item.medium_aktiviti === filterType;
+    return matchYear && matchMonth && matchDay && matchType;
+  });
 
-    // Kira Statistik Ringkas
-    const countBim = filtered.filter(i => i.medium_aktiviti === 'Bimbingan').length;
-    const countAkt = filtered.filter(i => i.medium_aktiviti === 'Aktiviti').length;
-    renderSummary(countBim, countAkt);
+  const countBim = filtered.filter(function (i) { return i.medium_aktiviti === 'Bimbingan'; }).length;
+  const countAkt = filtered.filter(function (i) { return i.medium_aktiviti === 'Aktiviti'; }).length;
+  renderSummary(countBim, countAkt);
 
-    // Update Label Meta
-    const metaEl = document.getElementById('list-meta');
-    if(metaEl) metaEl.innerText = `Memaparkan ${filtered.length} rekod bagi Tahun ${filterYear}`;
+  const metaEl = document.getElementById('list-meta');
+  if (metaEl) {
+    metaEl.textContent = 'Memaparkan ' + filtered.length + ' rekod bagi Tahun ' + filterYear;
+  }
 
-    // Jika Tiada Data
-    if (filtered.length === 0) {
-        listEl.innerHTML = `
-            <div class="flex flex-col items-center justify-center p-8 bg-gray-50 rounded-lg border border-gray-200 text-center">
-                <svg class="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
-                <p class="text-gray-500 font-medium">Tiada rekod ditemui untuk tetapan ini.</p>
-            </div>`;
-        return;
-    }
+  if (filtered.length === 0) {
+    const emptyState = document.createElement('div');
+    emptyState.className = 'flex flex-col items-center justify-center p-8 bg-gray-50 rounded-lg border border-gray-200 text-center';
+    const icon = createIcon(['M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2']);
+    icon.setAttribute('class', 'w-12 h-12 text-gray-300 mb-3');
+    emptyState.appendChild(icon);
+    emptyState.appendChild(createTextElement('p', 'text-gray-500 font-medium', 'Tiada rekod ditemui untuk tetapan ini.'));
+    listEl.appendChild(emptyState);
+    return;
+  }
 
-    // Kumpul Data Mengikut Bulan (Grouping)
-    const groups = {};
-    filtered.forEach(item => {
-        const mKey = item.tarikh.substring(0, 7); // Format: YYYY-MM
-        if (!groups[mKey]) groups[mKey] = [];
-        groups[mKey].push(item);
-    });
+  const groups = Object.create(null);
+  filtered.forEach(function (item) {
+    const mKey = item.tarikh.substring(0, 7);
+    if (!groups[mKey]) groups[mKey] = [];
+    groups[mKey].push(item);
+  });
 
-    // Susun Bulan Terkini Dahulu
-    Object.keys(groups).sort().reverse().forEach(key => {
-        const items = groups[key];
-        const monthLabel = msMY.format(new Date(key + '-01'));
+  const frag = document.createDocumentFragment();
 
-        const section = document.createElement('section');
-        // Sticky Month Header
-        section.innerHTML = `
-            <div class="sticky top-16 bg-gray-50/95 backdrop-blur z-10 py-2 border-b border-gray-200 mb-4">
-                <h3 class="text-lg font-bold text-gray-700 flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full bg-gray-400"></span>
-                    ${monthLabel} ${filterYear}
-                </h3>
-            </div>`;
+  Object.keys(groups).sort().reverse().forEach(function (key) {
+    const items = groups[key];
+    const dt = new Date(key + '-01');
+    const monthLabel = typeof msMY.format === 'function' 
+      ? msMY.format(dt) 
+      : dt.toLocaleDateString('ms-MY', { month: 'long' });
+
+    const section = document.createElement('section');
+    
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'sticky top-16 bg-gray-50/95 backdrop-blur z-10 py-2 border-b border-gray-200 mb-4';
+    const h3 = createTextElement('h3', 'text-lg font-bold text-gray-700 flex items-center gap-2', '');
+    const dotSpan = document.createElement('span');
+    dotSpan.className = 'w-2 h-2 rounded-full bg-gray-400';
+    h3.appendChild(dotSpan);
+    h3.appendChild(document.createTextNode(' ' + monthLabel + ' ' + filterYear));
+    headerDiv.appendChild(h3);
+    section.appendChild(headerDiv);
+
+    const grid = document.createElement('div');
+    grid.className = 'grid gap-4';
+
+    items.forEach(function (act) {
+      const isBimbingan = act.medium_aktiviti === 'Bimbingan';
+      const badgeColor = isBimbingan ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
+      
+      const card = document.createElement('div');
+      card.className = 'bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200';
+      
+      const metaRow = document.createElement('div');
+      metaRow.className = 'flex justify-between items-start mb-2';
+      metaRow.appendChild(createTextElement('span', 'px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide ' + badgeColor, act.medium_aktiviti));
+      
+      const dtObj = new Date(act.tarikh);
+      const formattedDate = dtObj.toLocaleDateString('ms-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      metaRow.appendChild(createTextElement('span', 'text-xs font-mono text-gray-400', formattedDate));
+      card.appendChild(metaRow);
+      
+      card.appendChild(createTextElement('h4', 'text-lg font-bold text-gray-900 leading-snug mb-2 uppercase', act.tajuk || '(Tiada Tajuk)'));
+      
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'text-sm text-gray-600 space-y-1 mb-3';
+      
+      const timeP = document.createElement('p');
+      timeP.className = 'flex items-center gap-2 uppercase';
+      timeP.appendChild(createIcon('M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'));
+      timeP.appendChild(document.createTextNode(' ' + (act.masa || '-')));
+      infoDiv.appendChild(timeP);
+      
+      const placeP = document.createElement('p');
+      placeP.className = 'flex items-center gap-2 uppercase';
+      placeP.appendChild(createIcon(['M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z', 'M15 11a3 3 0 11-6 0 3 3 0 016 0z']));
+      placeP.appendChild(document.createTextNode(' ' + (act.tempat || '-')));
+      infoDiv.appendChild(placeP);
+      
+      if (act.nama_guru) {
+        const teacherP = document.createElement('p');
+        teacherP.className = 'flex items-center gap-2 uppercase';
+        teacherP.appendChild(createIcon(['M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z']));
+        teacherP.appendChild(document.createTextNode(' ' + act.nama_guru));
+        infoDiv.appendChild(teacherP);
+      }
+      card.appendChild(infoDiv);
+      
+      const remarksDiv = document.createElement('div');
+      remarksDiv.className = 'bg-gray-50 p-3 rounded-lg text-sm border border-gray-100';
+      
+      const impakWrap = document.createElement('div');
+      impakWrap.className = 'mb-2';
+      impakWrap.appendChild(createTextElement('span', 'text-xs font-bold text-gray-400 uppercase', 'Impak / Catatan'));
+      const impakContent = document.createElement('div');
+      impakContent.className = 'text-gray-700 mt-0.5 uppercase';
+      impakContent.style.overflowWrap = 'anywhere';
+      impakContent.appendChild(linkifySafe(act.impak_catatan));
+      impakWrap.appendChild(impakContent);
+      remarksDiv.appendChild(impakWrap);
+      
+      const susulWrap = document.createElement('div');
+      susulWrap.appendChild(createTextElement('span', 'text-xs font-bold text-gray-400 uppercase', 'Tindak Susul'));
+      const susulContent = document.createElement('div');
+      susulContent.className = 'text-gray-700 mt-0.5 uppercase';
+      susulContent.style.overflowWrap = 'anywhere';
+      susulContent.appendChild(linkifySafe(act.tindak_susul));
+      susulWrap.appendChild(susulContent);
+      remarksDiv.appendChild(susulWrap);
+      
+      card.appendChild(remarksDiv);
+
+      if (currentUser) {
+        const actionRow = document.createElement('div');
+        actionRow.className = 'flex gap-2 mt-4 pt-3 border-t border-gray-100 no-print';
         
-        const grid = document.createElement('div');
-        grid.className = 'grid gap-4';
-
-        items.forEach(act => {
-            const isBimbingan = act.medium_aktiviti === 'Bimbingan';
-            const badgeColor = isBimbingan ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
-            
-            // Butang Edit/Salin/Padam (Hanya jika Login)
-            let actionButtons = '';
-            if (currentUser) {
-                // Escape JSON untuk elak error quote
-                const safeJson = JSON.stringify(act).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
-                actionButtons = `
-                <div class="flex gap-2 mt-4 pt-3 border-t border-gray-100 no-print">
-                    <button onclick='window.openEditModal(${safeJson}, false)' class="flex-1 py-1.5 rounded text-sm text-blue-600 hover:bg-blue-50 font-medium transition">✏️ Edit</button>
-                    <button onclick='window.openEditModal(${safeJson}, true)' class="flex-1 py-1.5 rounded text-sm text-purple-600 hover:bg-purple-50 font-medium transition">📋 Salin</button>
-                    <button onclick="window.deleteActivity('${act.id}')" class="flex-1 py-1.5 rounded text-sm text-red-600 hover:bg-red-50 font-medium transition">🗑️ Padam</button>
-                </div>
-                `;
-            }
-
-            const card = document.createElement('div');
-            card.className = 'bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200';
-            card.innerHTML = `
-                <div class="flex justify-between items-start mb-2">
-                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide ${badgeColor}">${act.medium_aktiviti}</span>
-                    <span class="text-xs font-mono text-gray-400">${fullDate(act.tarikh)}</span>
-                </div>
-                <h4 class="text-lg font-bold text-gray-900 leading-snug mb-2 uppercase">${act.tajuk || '(Tiada Tajuk)'}</h4>
-                <div class="text-sm text-gray-600 space-y-1 mb-3">
-                    <p class="flex items-center gap-2 uppercase"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> ${act.masa || '-'}</p>
-                    <p class="flex items-center gap-2 uppercase"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> ${act.tempat || '-'}</p>
-                    ${act.nama_guru ? `<p class="flex items-center gap-2 uppercase"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg> ${act.nama_guru}</p>` : ''}
-                </div>
-                <div class="bg-gray-50 p-3 rounded-lg text-sm border border-gray-100">
-                    <div class="mb-2">
-                        <span class="text-xs font-bold text-gray-400 uppercase">Impak / Catatan</span>
-                        <div class="text-gray-700 mt-0.5 uppercase" style="overflow-wrap:anywhere;">${linkify(act.impak_catatan)}</div>
-                    </div>
-                    <div>
-                        <span class="text-xs font-bold text-gray-400 uppercase">Tindak Susul</span>
-                        <div class="text-gray-700 mt-0.5 uppercase" style="overflow-wrap:anywhere;">${linkify(act.tindak_susul)}</div>
-                    </div>
-                </div>
-                ${actionButtons}
-            `;
-            grid.appendChild(card);
-        });
-        section.appendChild(grid);
-        listEl.appendChild(section);
+        const btnEdit = createTextElement('button', 'flex-1 py-1.5 rounded text-sm text-blue-600 hover:bg-blue-50 font-medium transition', '✏️ Edit');
+        btnEdit.onclick = function() { window.openEditModal(act, false); };
+        
+        const btnCopy = createTextElement('button', 'flex-1 py-1.5 rounded text-sm text-purple-600 hover:bg-purple-50 font-medium transition', '📋 Salin');
+        btnCopy.onclick = function() { window.openEditModal(act, true); };
+        
+        const btnDel = createTextElement('button', 'flex-1 py-1.5 rounded text-sm text-red-600 hover:bg-red-50 font-medium transition', '🗑️ Padam');
+        btnDel.onclick = function() { window.deleteActivity(act.id); };
+        
+        actionRow.appendChild(btnEdit);
+        actionRow.appendChild(btnCopy);
+        actionRow.appendChild(btnDel);
+        card.appendChild(actionRow);
+      }
+      
+      grid.appendChild(card);
     });
+    section.appendChild(grid);
+    frag.appendChild(section);
+  });
+  
+  listEl.appendChild(frag);
+}
+
+function createSummaryBox(type, total, isActive) {
+  const isBimbingan = type === 'Bimbingan';
+  const colorPrefix = isBimbingan ? 'green' : 'blue';
+  
+  const box = document.createElement('div');
+  box.className = 'summary-box cursor-pointer p-4 rounded-xl border transition-all duration-200 ';
+  box.className += isActive 
+    ? 'ring-2 ring-' + colorPrefix + '-500 bg-' + colorPrefix + '-50 shadow-md'
+    : 'bg-white border-' + colorPrefix + '-200 hover:shadow-sm';
+  box.onclick = function() { window.toggleTypeFilter(type); };
+
+  const topRow = document.createElement('div');
+  topRow.className = 'flex justify-between items-start';
+  topRow.appendChild(createTextElement('div', 'text-xs font-bold text-' + colorPrefix + '-600 uppercase tracking-wide', type));
+  
+  if (isActive) {
+    topRow.appendChild(createTextElement('span', 'text-' + colorPrefix + '-600 font-bold', '✓'));
+  }
+  box.appendChild(topRow);
+  box.appendChild(createTextElement('div', 'text-3xl font-extrabold text-' + colorPrefix + '-800 mt-1', String(total)));
+  
+  return box;
 }
 
 function renderSummary(totalBim, totalAkt) {
-    const boxEl = document.getElementById('summary-boxes');
-    if(!boxEl) return;
-
-    const isBimActive = filterType === 'Bimbingan';
-    const isAktActive = filterType === 'Aktiviti';
-    
-    boxEl.innerHTML = `
-        <div onclick="window.toggleTypeFilter('Bimbingan')" class="summary-box cursor-pointer p-4 rounded-xl border transition-all duration-200 ${isBimActive ? 'ring-2 ring-green-500 bg-green-50 shadow-md' : 'bg-white border-green-200 hover:shadow-sm'}">
-            <div class="flex justify-between items-start">
-                <div class="text-xs font-bold text-green-600 uppercase tracking-wide">Bimbingan</div>
-                ${isBimActive ? '<span class="text-green-600 font-bold">✓</span>' : ''}
-            </div>
-            <div class="text-3xl font-extrabold text-green-800 mt-1">${totalBim}</div>
-        </div>
-        <div onclick="window.toggleTypeFilter('Aktiviti')" class="summary-box cursor-pointer p-4 rounded-xl border transition-all duration-200 ${isAktActive ? 'ring-2 ring-blue-500 bg-blue-50 shadow-md' : 'bg-white border-blue-200 hover:shadow-sm'}">
-            <div class="flex justify-between items-start">
-                <div class="text-xs font-bold text-blue-600 uppercase tracking-wide">Aktiviti</div>
-                ${isAktActive ? '<span class="text-blue-600 font-bold">✓</span>' : ''}
-            </div>
-            <div class="text-3xl font-extrabold text-blue-800 mt-1">${totalAkt}</div>
-        </div>
-    `;
+  const boxEl = document.getElementById('summary-boxes');
+  if (!boxEl) return;
+  boxEl.innerHTML = '';
+  
+  const isBimActive = filterType === 'Bimbingan';
+  const isAktActive = filterType === 'Aktiviti';
+  
+  boxEl.appendChild(createSummaryBox('Bimbingan', totalBim, isBimActive));
+  boxEl.appendChild(createSummaryBox('Aktiviti', totalAkt, isAktActive));
 }
 
 function renderHeatmap() {
-    const grid = document.getElementById('heatmap-grid');
-    const label = document.getElementById('heatmap-year-label');
-    if(!grid) return;
-    
-    if(label) label.textContent = filterYear;
-    
-    // Init array 12 bulan
-    const months = Array.from({length: 12}, (_, i) => ({
-        idx: i,
-        name: new Date(2000, i, 1).toLocaleDateString('ms-MY', { month: 'long' }),
-        count: 0,
-        bim: 0,
-        akt: 0
-    }));
+  const grid = document.getElementById('heatmap-grid');
+  const label = document.getElementById('heatmap-year-label');
+  if (!grid) return;
+  
+  if (label) label.textContent = filterYear;
+  
+  const months = Array.from({ length: 12 }, function (_, i) {
+    return {
+      idx: i,
+      name: new Date(2000, i, 1).toLocaleDateString('ms-MY', { month: 'long' }),
+      count: 0,
+      bim: 0,
+      akt: 0
+    };
+  });
 
-    // Isi data heatmap
-    allData.forEach(item => {
-        const d = new Date(item.tarikh);
-        if (d.getFullYear() === filterYear) {
-            const m = d.getMonth();
-            months[m].count++;
-            if (item.medium_aktiviti === 'Bimbingan') months[m].bim++;
-            else months[m].akt++;
-        }
-    });
-
-    const maxVal = Math.max(1, ...months.map(m => m.count));
-
-    grid.innerHTML = months.map(m => {
-        const opacity = m.count === 0 ? 0.05 : (m.count / maxVal);
-        const bgColor = `rgba(212, 175, 55, ${Math.max(0.05, opacity)})`; 
-        const borderColor = m.count > 0 ? 'border-yellow-400' : 'border-yellow-100';
-        
-        return `
-            <div class="rounded-xl p-3 border ${borderColor} transition-transform hover:scale-105" style="background-color: ${bgColor}">
-                <div class="text-sm font-bold text-gray-800">${m.name}</div>
-                <div class="text-xs text-gray-600 mt-1">Jumlah: <b>${m.count}</b></div>
-                <div class="flex gap-1 mt-2 flex-wrap">
-                    ${m.count > 0 ? `<span class="text-[10px] bg-white/80 px-1.5 py-0.5 rounded text-green-800 font-medium">B: ${m.bim}</span>` : ''}
-                    ${m.count > 0 ? `<span class="text-[10px] bg-white/80 px-1.5 py-0.5 rounded text-blue-800 font-medium">A: ${m.akt}</span>` : ''}
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-// =================================================================
-// 5. OPERASI CRUD (TAMBAH / KEMAS KINI / PADAM)
-// =================================================================
-
-// Tambah Aktiviti
-const addForm = document.getElementById('add-activity-form');
-if(addForm) {
-    addForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (!currentUser) return Swal.fire('Akses Ditolak', 'Sila log masuk dahulu.', 'warning');
-
-        // Kutip data form manual untuk kepastian (Disuntik dengan kaedah toUpperCase)
-        const finalPayload = {
-            medium_aktiviti: document.getElementById('medium_aktiviti').value,
-            tajuk: document.getElementById('tajuk').value.toUpperCase(),
-            tarikh: document.getElementById('tarikh').value,
-            masa: document.getElementById('masa').value.toUpperCase(),
-            tempat: document.getElementById('tempat').value.toUpperCase(),
-            nama_guru: document.getElementById('nama_guru').value.toUpperCase(),
-            impak_catatan: safeUpperCase(document.getElementById('impak_catatan').value),
-            tindak_susul: safeUpperCase(document.getElementById('tindak_susul').value)
-        };
-
-        // PERUBAHAN: Guna table 'aktiviti'
-        const { error } = await supabaseClient.from('aktiviti').insert([finalPayload]);
-        if (error) {
-            Swal.fire('Ralat', error.message, 'error');
-        } else {
-            Swal.fire('Berjaya', 'Aktiviti berjaya ditambah.', 'success');
-            e.target.reset();
-            await initApp(); // Refresh data
-            window.switchTab('list');
-        }
-    });
-}
-
-// Simpan Perubahan (Edit / Salin)
-const saveBtn = document.getElementById('save-changes-btn');
-if(saveBtn) {
-    saveBtn.addEventListener('click', async () => {
-        if (!currentUser) return Swal.fire('Akses Ditolak', 'Sila log masuk dahulu.', 'warning');
-
-        const id = document.getElementById('edit-activity-id').value;
-        const payload = {
-            medium_aktiviti: document.getElementById('edit-medium_aktiviti').value,
-            tajuk: document.getElementById('edit-tajuk').value.toUpperCase(),
-            tarikh: document.getElementById('edit-tarikh').value,
-            masa: document.getElementById('edit-masa').value.toUpperCase(),
-            tempat: document.getElementById('edit-tempat').value.toUpperCase(),
-            nama_guru: document.getElementById('edit-nama_guru').value.toUpperCase(),
-            impak_catatan: safeUpperCase(document.getElementById('edit-impak_catatan').value),
-            tindak_susul: safeUpperCase(document.getElementById('edit-tindak_susul').value)
-        };
-
-        let error;
-        // PERUBAHAN: Guna table 'aktiviti'
-        if (window.isCopyMode) {
-            const { error: err } = await supabaseClient.from('aktiviti').insert([payload]);
-            error = err;
-        } else {
-            const { error: err } = await supabaseClient.from('aktiviti').update(payload).eq('id', id);
-            error = err;
-        }
-
-        if (error) {
-            Swal.fire('Gagal', error.message, 'error');
-        } else {
-            Swal.fire('Berjaya', 'Tindakan berjaya disimpan.', 'success');
-            window.closeEditModal();
-            await initApp();
-        }
-    });
-}
-
-// =================================================================
-// 6. FUNGSI GLOBAL (WINDOW EXPORTS)
-// =================================================================
-// Fungsi ini dilekatkan pada objek 'window' supaya boleh dipanggil 
-// dari atribut HTML onclick="window.functionName()"
-
-// Navigasi Tab
-window.switchTab = function(tab) {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
-    
-    const content = document.getElementById(`tab-${tab}`);
-    const btn = document.getElementById(`tab-${tab}-btn`);
-    
-    if(content) content.classList.add('active');
-    if(btn) btn.classList.add('active');
-    
-    if (tab === 'heatmap') renderHeatmap();
-}
-
-// Tapis Jenis (Bimbingan/Aktiviti)
-window.toggleTypeFilter = function(type) {
-    filterType = (filterType === type) ? '__ALL__' : type;
-    renderActivities();
-}
-
-// Tutup Modal Login
-window.closeLoginModal = function() { 
-    const modal = document.getElementById('login-modal');
-    if(modal) modal.classList.add('hidden'); 
-}
-
-// Buka Modal Edit/Salin
-window.isCopyMode = false;
-window.openEditModal = function(item, copyMode) {
-    // Pastikan item adalah objek valid
-    if(typeof item === 'string') {
-        try { item = JSON.parse(item); } catch(e){ console.error(e); }
+  allData.forEach(function (item) {
+    const d = new Date(item.tarikh);
+    if (d.getFullYear() === filterYear) {
+      const m = d.getMonth();
+      months[m].count++;
+      if (item.medium_aktiviti === 'Bimbingan') months[m].bim++;
+      else months[m].akt++;
     }
-    
-    window.isCopyMode = copyMode;
-    const modal = document.getElementById('edit-modal');
-    const title = document.getElementById('modal-title');
-    const btn = document.getElementById('save-changes-btn');
-    
-    if(!modal) return;
+  });
 
-    title.innerText = copyMode ? 'Salin Aktiviti Baharu' : 'Kemas Kini Aktiviti';
-    btn.innerText = copyMode ? 'Simpan Salinan' : 'Simpan Perubahan';
-    
-    // Isi Borang
-    document.getElementById('edit-activity-id').value = item.id || '';
-    document.getElementById('edit-medium_aktiviti').value = item.medium_aktiviti || 'Bimbingan';
-    // Potong timestamp jika ada, ambil YYYY-MM-DD
-    document.getElementById('edit-tarikh').value = item.tarikh ? item.tarikh.split('T')[0] : '';
-    document.getElementById('edit-tajuk').value = item.tajuk || '';
-    document.getElementById('edit-masa').value = item.masa || '';
-    document.getElementById('edit-tempat').value = item.tempat || '';
-    document.getElementById('edit-nama_guru').value = item.nama_guru || '';
-    document.getElementById('edit-impak_catatan').value = item.impak_catatan || '';
-    document.getElementById('edit-tindak_susul').value = item.tindak_susul || '';
+  let maxCount = 1;
+  months.forEach(function(m) {
+    if (m.count > maxCount) maxCount = m.count;
+  });
 
-    modal.classList.remove('hidden');
+  grid.innerHTML = '';
+  const frag = document.createDocumentFragment();
+
+  months.forEach(function (m) {
+    const opacity = m.count === 0 ? 0.05 : (m.count / maxCount);
+    const bgColor = 'rgba(212, 175, 55, ' + Math.max(0.05, opacity) + ')';
+    const borderColor = m.count > 0 ? 'border-yellow-400' : 'border-yellow-100';
+    
+    const card = document.createElement('div');
+    card.className = 'rounded-xl p-3 border ' + borderColor + ' transition-transform hover:scale-105';
+    card.style.backgroundColor = bgColor;
+    
+    card.appendChild(createTextElement('div', 'text-sm font-bold text-gray-800', m.name));
+    
+    const countDiv = document.createElement('div');
+    countDiv.className = 'text-xs text-gray-600 mt-1';
+    countDiv.appendChild(document.createTextNode('Jumlah: '));
+    countDiv.appendChild(createTextElement('b', '', String(m.count)));
+    card.appendChild(countDiv);
+    
+    const tagsDiv = document.createElement('div');
+    tagsDiv.className = 'flex gap-1 mt-2 flex-wrap';
+    if (m.count > 0) {
+      tagsDiv.appendChild(createTextElement('span', 'text-[10px] bg-white/80 px-1.5 py-0.5 rounded text-green-800 font-medium', 'B: ' + m.bim));
+      tagsDiv.appendChild(createTextElement('span', 'text-[10px] bg-white/80 px-1.5 py-0.5 rounded text-blue-800 font-medium', 'A: ' + m.akt));
+    }
+    card.appendChild(tagsDiv);
+    frag.appendChild(card);
+  });
+
+  grid.appendChild(frag);
+}
+
+// -----------------------------------------------------------------
+// HANDLERS BORANG
+// -----------------------------------------------------------------
+
+const addForm = document.getElementById('add-activity-form');
+if (addForm) {
+  addForm.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    if (!currentUser) return window.Swal.fire('Akses Ditolak', 'Sila log masuk dahulu.', 'warning');
+
+    const finalPayload = {
+      medium_aktiviti: document.getElementById('medium_aktiviti').value,
+      tajuk: document.getElementById('tajuk').value.toUpperCase(),
+      tarikh: document.getElementById('tarikh').value,
+      masa: document.getElementById('masa').value.toUpperCase(),
+      tempat: document.getElementById('tempat').value.toUpperCase(),
+      nama_guru: document.getElementById('nama_guru').value.toUpperCase(),
+      impak_catatan: safeUpperCase(document.getElementById('impak_catatan').value),
+      tindak_susul: safeUpperCase(document.getElementById('tindak_susul').value)
+    };
+
+    const response = await supabaseClient.from('aktiviti').insert([finalPayload]);
+    if (response.error) {
+      window.Swal.fire('Ralat', response.error.message, 'error');
+    } else {
+      window.Swal.fire('Berjaya', 'Aktiviti berjaya ditambah.', 'success');
+      e.target.reset();
+      await loadInitialData();
+      window.switchTab('list');
+    }
+  });
+}
+
+const saveBtn = document.getElementById('save-changes-btn');
+if (saveBtn) {
+  saveBtn.addEventListener('click', async function () {
+    if (!currentUser) return window.Swal.fire('Akses Ditolak', 'Sila log masuk dahulu.', 'warning');
+
+    const id = document.getElementById('edit-activity-id').value;
+    const payload = {
+      medium_aktiviti: document.getElementById('edit-medium_aktiviti').value,
+      tajuk: document.getElementById('edit-tajuk').value.toUpperCase(),
+      tarikh: document.getElementById('edit-tarikh').value,
+      masa: document.getElementById('edit-masa').value.toUpperCase(),
+      tempat: document.getElementById('edit-tempat').value.toUpperCase(),
+      nama_guru: document.getElementById('edit-nama_guru').value.toUpperCase(),
+      impak_catatan: safeUpperCase(document.getElementById('edit-impak_catatan').value),
+      tindak_susul: safeUpperCase(document.getElementById('edit-tindak_susul').value)
+    };
+
+    let response;
+    if (window.isCopyMode) {
+      response = await supabaseClient.from('aktiviti').insert([payload]);
+    } else {
+      response = await supabaseClient.from('aktiviti').update(payload).eq('id', id);
+    }
+
+    if (response.error) {
+      window.Swal.fire('Gagal', response.error.message, 'error');
+    } else {
+      window.Swal.fire('Berjaya', 'Tindakan berjaya disimpan.', 'success');
+      window.closeEditModal();
+      await loadInitialData();
+      refreshDataSilently();
+    }
+  });
+}
+
+// -----------------------------------------------------------------
+// FUNGSI MIGRATION (EKSPORT & IMPORT)
+// -----------------------------------------------------------------
+
+window.promptExportJson = async function() {
+  if (!currentUser) return window.Swal.fire('Akses Ditolak', 'Sila log masuk.', 'warning');
+  try {
+    const result = await window.DataMigration.exportJson(supabaseClient, allData);
+    window.Swal.fire('Eksport Selesai', result.totalRecords + ' rekod disimpan ke ' + result.filename, 'success');
+  } catch (err) {
+    window.Swal.fire('Ralat Eksport', err.message, 'error');
+  }
 };
 
-// Tutup Modal Edit
-window.closeEditModal = function() {
-    const modal = document.getElementById('edit-modal');
-    if(modal) modal.classList.add('hidden');
-}
+window.promptExportCsv = async function() {
+  if (!currentUser) return window.Swal.fire('Akses Ditolak', 'Sila log masuk.', 'warning');
+  try {
+    const result = await window.DataMigration.exportCsv(supabaseClient, allData);
+    window.Swal.fire('Eksport Selesai', result.totalRecords + ' rekod CSV disimpan ke ' + result.filename, 'success');
+  } catch (err) {
+    window.Swal.fire('Ralat Eksport', err.message, 'error');
+  }
+};
 
-// Padam Aktiviti
-window.deleteActivity = async function(id) {
-    const res = await Swal.fire({
-        title: 'Anda Pasti?', 
-        text: "Rekod yang dipadam tidak boleh dikembalikan!", 
-        icon: 'warning',
-        showCancelButton: true, 
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Ya, Padam', 
-        cancelButtonText: 'Batal'
-    });
+window.handleImportSelection = async function(event) {
+  if (!currentUser) return window.Swal.fire('Akses Ditolak', 'Sila log masuk.', 'warning');
+  const file = event.target.files[0];
+  if (!file) return;
+
+  try {
+    const parsed = await window.DataMigration.parseImportFile(file);
+    const summary = 'Rekod Sah: ' + parsed.validRecords.length + '\nDisingkirkan: ' + parsed.skippedCount;
     
-    if (res.isConfirmed) {
-        // PERUBAHAN: Guna table 'aktiviti'
-        const { error } = await supabaseClient.from('aktiviti').delete().eq('id', id);
-        if (error) Swal.fire('Gagal', error.message, 'error');
-        else {
-            Swal.fire('Berjaya', 'Rekod telah dipadam.', 'success');
-            await initApp();
-        }
+    const res = await window.Swal.fire({
+      title: 'Sahkan Import',
+      text: summary + '\n\nPilih mod import:',
+      icon: 'question',
+      showCancelButton: true,
+      showDenyButton: true,
+      confirmButtonText: 'Kekalkan ID Lama',
+      denyButtonText: 'Jana ID Baharu',
+      cancelButtonText: 'Batal'
+    });
+
+    if (res.isConfirmed || res.isDenied) {
+      const preserveIds = res.isConfirmed;
+      let progressDialog = window.Swal.fire({
+        title: 'Mengimport Data...',
+        html: 'Sila tunggu. Jangan tutup halaman ini.',
+        allowOutsideClick: false,
+        didOpen: () => { window.Swal.showLoading(); }
+      });
+
+      const result = await window.DataMigration.importRecords(supabaseClient, parsed.validRecords, {
+        preserveIds: preserveIds,
+        onProgress: function(p) { }
+      });
+
+      await loadInitialData();
+      refreshDataSilently();
+      
+      window.Swal.fire('Berjaya', 'Import selesai (' + result.importedCount + ' rekod).', 'success');
     }
+  } catch (err) {
+    window.Swal.fire('Ralat Import', err.message, 'error');
+  } finally {
+    event.target.value = '';
+  }
+};
+
+const loginFormEl = document.getElementById('login-form');
+if (loginFormEl) {
+  loginFormEl.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value;
+    const pass = document.getElementById('login-password').value;
+    const response = await supabaseClient.auth.signInWithPassword({ email: email, password: pass });
+    if (response.error) {
+      window.Swal.fire('Gagal', 'Emel atau kata laluan salah.', 'error');
+    } else {
+      window.closeLoginModal();
+      window.Swal.fire('Berjaya', 'Selamat kembali!', 'success');
+      loginFormEl.reset();
+    }
+  });
 }
 
-// Utiliti Huruf Besar Selamat (Elak URL rosak)
+if (btnLogout) {
+  btnLogout.addEventListener('click', async function () {
+    await supabaseClient.auth.signOut();
+    window.Swal.fire('Log Keluar', 'Anda telah log keluar.', 'info');
+  });
+}
+
+if (btnShowLogin) {
+  btnShowLogin.addEventListener('click', function () {
+    const modal = document.getElementById('login-modal');
+    if (modal) modal.classList.remove('hidden');
+  });
+}
+
+// -----------------------------------------------------------------
+// WINDOW EXPORTS
+// -----------------------------------------------------------------
+
+window.switchTab = function (tab) {
+  document.querySelectorAll('.tab-content').forEach(function (el) { el.classList.remove('active'); });
+  document.querySelectorAll('.tab-button').forEach(function (el) { el.classList.remove('active'); });
+
+  const content = document.getElementById('tab-' + tab);
+  const btn = document.getElementById('tab-' + tab + '-btn');
+
+  if (content) content.classList.add('active');
+  if (btn) btn.classList.add('active');
+
+  if (tab === 'heatmap') renderHeatmap();
+};
+
+window.toggleTypeFilter = function (type) {
+  filterType = (filterType === type) ? '__ALL__' : type;
+  renderActivities();
+};
+
+window.closeLoginModal = function () {
+  const modal = document.getElementById('login-modal');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.openConnectionModal = function () {
+  const modal = document.getElementById('connection-modal');
+  if (!modal) return;
+  const currentEnv = window.__ENV || {};
+  document.getElementById('override-url').value = currentEnv.SUPABASE_URL || '';
+  document.getElementById('override-key').value = currentEnv.SUPABASE_ANON_KEY || '';
+  document.getElementById('override-schema').value = currentEnv.SUPABASE_SCHEMA || 'pap';
+  modal.classList.remove('hidden');
+};
+
+window.closeConnectionModal = function () {
+  const modal = document.getElementById('connection-modal');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.saveConnectionOverride = function () {
+  const url = document.getElementById('override-url').value;
+  const key = document.getElementById('override-key').value;
+  const schema = document.getElementById('override-schema').value;
+  try {
+    window.AppConfig.setOverride({ SUPABASE_URL: url, SUPABASE_ANON_KEY: key, SUPABASE_SCHEMA: schema });
+    window.Swal.fire('Berjaya', 'Profil sambungan telah ditukar. Memuat semula...', 'success').then(function() {
+      window.location.reload();
+    });
+  } catch (err) {
+    window.Swal.fire('Ralat', err.message, 'error');
+  }
+};
+
+window.clearConnectionOverride = function () {
+  window.AppConfig.clearOverride();
+  window.Swal.fire('Ditetapkan Semula', 'Kembali ke konfigurasi asal. Memuat semula...', 'info').then(function() {
+    window.location.reload();
+  });
+};
+
+window.isCopyMode = false;
+
+window.openEditModal = function (item, copyMode) {
+  let parsedItem = item;
+  if (typeof item === 'string') {
+    try { parsedItem = JSON.parse(item); } catch (e) { }
+  }
+
+  window.isCopyMode = copyMode;
+  const modal = document.getElementById('edit-modal');
+  const title = document.getElementById('modal-title');
+  const btn = document.getElementById('save-changes-btn');
+
+  if (!modal) return;
+
+  title.textContent = copyMode ? 'Salin Aktiviti Baharu' : 'Kemas Kini Aktiviti';
+  btn.textContent = copyMode ? 'Simpan Salinan' : 'Simpan Perubahan';
+
+  document.getElementById('edit-activity-id').value = parsedItem.id || '';
+  document.getElementById('edit-medium_aktiviti').value = parsedItem.medium_aktiviti || 'Bimbingan';
+  document.getElementById('edit-tarikh').value = parsedItem.tarikh ? String(parsedItem.tarikh).split('T')[0] : '';
+  document.getElementById('edit-tajuk').value = parsedItem.tajuk || '';
+  document.getElementById('edit-masa').value = parsedItem.masa || '';
+  document.getElementById('edit-tempat').value = parsedItem.tempat || '';
+  document.getElementById('edit-nama_guru').value = parsedItem.nama_guru || '';
+  document.getElementById('edit-impak_catatan').value = parsedItem.impak_catatan || '';
+  document.getElementById('edit-tindak_susul').value = parsedItem.tindak_susul || '';
+
+  modal.classList.remove('hidden');
+};
+
+window.closeEditModal = function () {
+  const modal = document.getElementById('edit-modal');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.deleteActivity = async function (id) {
+  const res = await window.Swal.fire({
+    title: 'Anda Pasti?',
+    text: "Rekod yang dipadam tidak boleh dikembalikan!",
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#d33',
+    cancelButtonColor: '#3085d6',
+    confirmButtonText: 'Ya, Padam',
+    cancelButtonText: 'Batal'
+  });
+
+  if (res.isConfirmed) {
+    const response = await supabaseClient.from('aktiviti').delete().eq('id', id);
+    if (response.error) {
+      window.Swal.fire('Gagal', response.error.message, 'error');
+    } else {
+      window.Swal.fire('Berjaya', 'Rekod telah dipadam.', 'success');
+      await loadInitialData();
+      refreshDataSilently();
+    }
+  }
+};
+
 function safeUpperCase(text) {
-    if (!text) return '';
-    const urlRegex = /(https?:\/\/[^\s<]+)/gi;
-    const parts = text.split(urlRegex);
-    return parts.map(part => {
-        // Uji jika ia adalah permulaan pautan HTTP/HTTPS
-        if (/^https?:\/\//i.test(part)) {
-            return part; // Kekalkan kes asal untuk URL
-        }
-        return part.toUpperCase(); // Tukar huruf besar untuk teks biasa
-    }).join('');
-}
-
-// Utiliti Linkify (Tukar teks URL jadi Link)
-function linkify(text) {
-    if (!text) return '-';
-    const urlRegex = /(https?:\/\/[^\s<]+)/g;
-    return text.replace(urlRegex, url => `<a href="${url}" target="_blank" class="text-blue-600 underline hover:text-blue-800 break-all">${url}</a>`);
-}
-
-// Butang Cetak
-const printBtn = document.getElementById('print-btn');
-if(printBtn) printBtn.addEventListener('click', () => window.print());
-
-// Header Scroll Effect
-window.addEventListener('scroll', () => {
-    const h = document.getElementById('stickyHeader');
-    if(h) {
-        if (window.scrollY > 10) h.classList.add('scrolled');
-        else h.classList.remove('scrolled');
+  if (!text) return '';
+  const urlRegex = /(https?:\/\/[^\s<]+)/gi;
+  const parts = String(text).split(urlRegex);
+  return parts.map(function(part) {
+    if (/^https?:\/\//i.test(part)) {
+      return part;
     }
+    return part.toUpperCase();
+  }).join('');
+}
+
+const printBtn = document.getElementById('print-btn');
+if (printBtn) {
+  printBtn.addEventListener('click', function () { window.print(); });
+}
+
+window.addEventListener('scroll', function () {
+  const h = document.getElementById('stickyHeader');
+  if (h) {
+    if (window.scrollY > 10) h.classList.add('scrolled');
+    else h.classList.remove('scrolled');
+  }
 });
 
-// INIT APLIKASI
 document.addEventListener('DOMContentLoaded', initApp);
