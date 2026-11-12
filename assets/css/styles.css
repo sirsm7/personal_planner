@@ -1,5 +1,9 @@
+html,
 body {
   font-family: 'Inter', sans-serif;
+  min-height: 100dvh;
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
 }
 
 .sticky-header {
@@ -8,7 +12,8 @@ body {
   z-index: 40;
   background: rgba(249, 250, 251, 0.95);
   backdrop-filter: blur(5px);
-  transition: box-shadow 0.2s;
+  -webkit-backdrop-filter: blur(5px);
+  transition: box-shadow 0.2s ease-out;
 }
 
 .sticky-header.scrolled {
@@ -16,13 +21,26 @@ body {
   border-bottom: 1px solid #e5e7eb;
 }
 
+.tab-nav-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.tab-nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .tab-button {
-  padding: 0.75rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.625rem 1rem;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   color: #6b7280;
-  transition: all 0.2s;
+  transition: color 0.2s, border-color 0.2s;
   white-space: nowrap;
+  touch-action: manipulation;
 }
 
 .tab-button:hover {
@@ -37,7 +55,7 @@ body {
 
 .tab-content {
   display: none;
-  animation: fadeIn 0.3s ease-in-out;
+  animation: fadeIn 0.25s ease-in-out;
 }
 
 .tab-content.active {
@@ -58,6 +76,7 @@ body {
 .brand-photo {
   width: 56px;
   height: 56px;
+  flex-shrink: 0;
   border-radius: 9999px;
   object-fit: cover;
   border: 3px solid #d4af37;
@@ -67,6 +86,7 @@ body {
 .brand-avatar {
   width: 56px;
   height: 56px;
+  flex-shrink: 0;
   border-radius: 9999px;
   display: flex;
   align-items: center;
@@ -77,7 +97,9 @@ body {
 }
 
 .summary-box {
+  min-height: 84px;
   transition: transform 0.2s, box-shadow 0.2s;
+  touch-action: manipulation;
 }
 
 .summary-box:hover {
@@ -121,9 +143,17 @@ body {
   transition: width 0.2s ease-out;
 }
 
+.modal-scroll-body {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 @media print {
+  html,
   body {
     background: #fff;
+    min-height: auto;
+    overflow: visible;
   }
 
   #stickyHeader {

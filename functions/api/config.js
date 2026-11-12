@@ -1,21 +1,41 @@
+function normalizeUrl(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.trim().replace(/\/+$/, '');
+}
+
 export async function onRequestGet(context) {
-  const env = context.env || {};
-  const supabaseUrl = typeof env.SUPABASE_URL === 'string' ? env.SUPABASE_URL.trim() : '';
+  const env = context && context.env ? context.env : {};
+  const supabaseUrl = normalizeUrl(env.SUPABASE_URL);
   const supabaseAnonKey = typeof env.SUPABASE_ANON_KEY === 'string' ? env.SUPABASE_ANON_KEY.trim() : '';
-  const supabaseSchema = typeof env.SUPABASE_SCHEMA === 'string' && env.SUPABASE_SCHEMA.trim() !== ''
-    ? env.SUPABASE_SCHEMA.trim()
-    : 'pap';
-  const gasEndpointUrl = typeof env.GAS_ENDPOINT_URL === 'string' ? env.GAS_ENDPOINT_URL.trim() : '';
+  const rawSchema = typeof env.SUPABASE_SCHEMA === 'string' ? env.SUPABASE_SCHEMA.trim() : '';
+  const supabaseSchema = rawSchema !== '' ? rawSchema : 'pap';
+  const gasEndpointUrl = normalizeUrl(env.GAS_ENDPOINT_URL);
 
   const headers = {
     'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store, no-cache, must-revalidate'
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
+    'Pragma': 'no-cache',
+    'X-Content-Type-Options': 'nosniff'
   };
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseUrl || !/^https?:\/\/.+/i.test(supabaseUrl) || !supabaseAnonKey) {
     return new Response(
       JSON.stringify({
-        error: 'Missing required Supabase environment variables.'
+        error: 'Missing or invalid required Supabase environment variables.'
+      }),
+      {
+        status: 500,
+        headers
+      }
+    );
+  }
+
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(supabaseSchema)) {
+    return new Response(
+      JSON.stringify({
+        error: 'Invalid SUPABASE_SCHEMA format.'
       }),
       {
         status: 500,

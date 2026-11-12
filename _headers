@@ -1,9 +1,11 @@
 /*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https: wss: https://*.supabase.co wss://*.supabase.co https://cloudflareinsights.com https://script.google.com https://script.googleusercontent.com; img-src 'self' data: blob: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https: wss: https://*.supabase.co wss://*.supabase.co https://cloudflareinsights.com https://script.google.com https://script.googleusercontent.com; img-src 'self' data: blob: https:;
+  X-Permitted-Cross-Domain-Policies: none
 
 /
   Cache-Control: no-cache
@@ -12,7 +14,4 @@
   Cache-Control: no-cache
 
 /assets/*
-  Cache-Control: public, max-age=86400, must-revalidate
-
-/assets/img/*
   Cache-Control: public, max-age=31536000, immutable

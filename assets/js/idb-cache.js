@@ -1,6 +1,6 @@
 (function () {
   const DB_NAME = 'pap_planner_cache_db';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const STORE_RECORDS = 'records';
   const STORE_META = 'meta';
   const DEFAULT_TTL_MS = 300000;
@@ -10,22 +10,35 @@
   let useMemoryFallback = false;
   const inflightRevalidations = Object.create(null);
 
-  if (!window.__memoryCache) {
+  if (!window.__memoryCache || typeof window.__memoryCache !== 'object') {
     window.__memoryCache = {
       records: Object.create(null),
       meta: Object.create(null)
     };
   }
 
+  function isValidRecord(item) {
+    if (!item || typeof item !== 'object') {
+      return false;
+    }
+    if (item.id === undefined || item.id === null || String(item.id).trim() === '') {
+      return false;
+    }
+    if (typeof item.tarikh !== 'string' || item.tarikh.trim() === '') {
+      return false;
+    }
+    return true;
+  }
+
   function sortRecordsDesc(items) {
-    return items.slice().sort(function (a, b) {
-      const dateA = a && a.tarikh ? String(a.tarikh) : '';
-      const dateB = b && b.tarikh ? String(b.tarikh) : '';
+    return items.filter(isValidRecord).sort(function (a, b) {
+      const dateA = String(a.tarikh);
+      const dateB = String(b.tarikh);
       if (dateB !== dateA) {
         return dateB.localeCompare(dateA);
       }
-      const idA = Number(a && a.id ? a.id : 0);
-      const idB = Number(b && b.id ? b.id : 0);
+      const idA = Number(a.id || 0);
+      const idB = Number(b.id || 0);
       return idB - idA;
     });
   }
@@ -47,6 +60,11 @@
     const url = env && env.SUPABASE_URL ? env.SUPABASE_URL : 'default';
     const schema = env && env.SUPABASE_SCHEMA ? env.SUPABASE_SCHEMA : 'pap';
     return url + '::' + schema;
+  }
+
+  function resetDatabaseConnection() {
+    dbInstance = null;
+    dbInitPromise = null;
   }
 
   function openDatabase() {
@@ -79,30 +97,36 @@
         };
 
         request.onsuccess = function (event) {
-          dbInstance = event.target.result;
-          dbInstance.onversionchange = function () {
-            dbInstance.close();
-            dbInstance = null;
-            dbInitPromise = null;
+          const db = event.target.result;
+          db.onversionchange = function () {
+            try {
+              db.close();
+            } catch (_) {
+            }
+            resetDatabaseConnection();
           };
+          db.onclose = function () {
+            resetDatabaseConnection();
+          };
+          dbInstance = db;
           dbInitPromise = null;
           resolve(dbInstance);
         };
 
         request.onerror = function () {
           useMemoryFallback = true;
-          dbInitPromise = null;
+          resetDatabaseConnection();
           resolve(null);
         };
 
         request.onblocked = function () {
           useMemoryFallback = true;
-          dbInitPromise = null;
+          resetDatabaseConnection();
           resolve(null);
         };
       } catch (_) {
         useMemoryFallback = true;
-        dbInitPromise = null;
+        resetDatabaseConnection();
         resolve(null);
       }
     });
@@ -129,21 +153,32 @@
 
   function writeAllToMemory(namespace, items) {
     const bucket = Object.create(null);
+    let validCount = 0;
     items.forEach(function (item) {
-      if (item && item.id !== undefined && item.id !== null) {
+      if (isValidRecord(item)) {
         bucket[String(item.id)] = item;
+        validCount++;
       }
     });
     window.__memoryCache.records[namespace] = bucket;
     window.__memoryCache.meta[namespace] = {
       namespace: namespace,
       updatedAt: Date.now(),
-      count: items.length
+      count: validCount
+    };
+  }
+
+  function touchMemoryMeta(namespace) {
+    const bucket = window.__memoryCache.records[namespace] || Object.create(null);
+    window.__memoryCache.meta[namespace] = {
+      namespace: namespace,
+      updatedAt: Date.now(),
+      count: Object.keys(bucket).length
     };
   }
 
   async function getCachedActivities(ttlMs) {
-    const effectiveTtl = typeof ttlMs === 'number' ? ttlMs : DEFAULT_TTL_MS;
+    const effectiveTtl = typeof ttlMs === 'number' && ttlMs >= 0 ? ttlMs : DEFAULT_TTL_MS;
     const namespace = await resolveNamespace();
     const db = await openDatabase();
 
@@ -174,7 +209,7 @@
 
         tx.oncomplete = function () {
           const items = wrappedRecords.map(function (entry) {
-            return entry.data;
+            return entry && entry.data ? entry.data : null;
           });
           const updatedAt = metaRecord && typeof metaRecord.updatedAt === 'number' ? metaRecord.updatedAt : 0;
           const isStale = updatedAt === 0 || (Date.now() - updatedAt) > effectiveTtl;
@@ -187,23 +222,23 @@
         };
 
         tx.onerror = function () {
-          useMemoryFallback = true;
+          resetDatabaseConnection();
           resolve(readFromMemory(namespace, effectiveTtl));
         };
 
         tx.onabort = function () {
-          useMemoryFallback = true;
+          resetDatabaseConnection();
           resolve(readFromMemory(namespace, effectiveTtl));
         };
       } catch (_) {
-        useMemoryFallback = true;
+        resetDatabaseConnection();
         resolve(readFromMemory(namespace, effectiveTtl));
       }
     });
   }
 
   async function setCachedActivities(items) {
-    const list = Array.isArray(items) ? items : [];
+    const list = Array.isArray(items) ? items.filter(isValidRecord) : [];
     const namespace = await resolveNamespace();
     writeAllToMemory(namespace, list);
 
@@ -227,14 +262,12 @@
             cursor.continue();
           } else {
             list.forEach(function (item) {
-              if (item && item.id !== undefined && item.id !== null) {
-                recordStore.put({
-                  cache_key: namespace + '::' + String(item.id),
-                  namespace: namespace,
-                  id: item.id,
-                  data: item
-                });
-              }
+              recordStore.put({
+                cache_key: namespace + '::' + String(item.id),
+                namespace: namespace,
+                id: item.id,
+                data: item
+              });
             });
             metaStore.put({
               namespace: namespace,
@@ -249,23 +282,23 @@
         };
 
         tx.onerror = function () {
-          useMemoryFallback = true;
+          resetDatabaseConnection();
           resolve(sortRecordsDesc(list));
         };
 
         tx.onabort = function () {
-          useMemoryFallback = true;
+          resetDatabaseConnection();
           resolve(sortRecordsDesc(list));
         };
       } catch (_) {
-        useMemoryFallback = true;
+        resetDatabaseConnection();
         resolve(sortRecordsDesc(list));
       }
     });
   }
 
   async function upsertActivity(record) {
-    if (!record || record.id === undefined || record.id === null) {
+    if (!isValidRecord(record)) {
       return false;
     }
 
@@ -281,6 +314,7 @@
       return false;
     }
     window.__memoryCache.records[namespace][idKey] = record;
+    touchMemoryMeta(namespace);
 
     const db = await openDatabase();
     if (!db || useMemoryFallback) {
@@ -289,8 +323,9 @@
 
     return new Promise(function (resolve) {
       try {
-        const tx = db.transaction([STORE_RECORDS], 'readwrite');
+        const tx = db.transaction([STORE_RECORDS, STORE_META], 'readwrite');
         const recordStore = tx.objectStore(STORE_RECORDS);
+        const metaStore = tx.objectStore(STORE_META);
         const getReq = recordStore.get(cacheKey);
         let applied = false;
 
@@ -307,6 +342,11 @@
             id: record.id,
             data: record
           });
+          metaStore.put({
+            namespace: namespace,
+            updatedAt: Date.now(),
+            count: Object.keys(window.__memoryCache.records[namespace]).length
+          });
           applied = true;
         };
 
@@ -315,23 +355,23 @@
         };
 
         tx.onerror = function () {
-          useMemoryFallback = true;
+          resetDatabaseConnection();
           resolve(true);
         };
 
         tx.onabort = function () {
-          useMemoryFallback = true;
+          resetDatabaseConnection();
           resolve(true);
         };
       } catch (_) {
-        useMemoryFallback = true;
+        resetDatabaseConnection();
         resolve(true);
       }
     });
   }
 
   async function removeActivity(id) {
-    if (id === undefined || id === null) {
+    if (id === undefined || id === null || String(id).trim() === '') {
       return false;
     }
 
@@ -341,6 +381,7 @@
 
     if (window.__memoryCache.records[namespace]) {
       delete window.__memoryCache.records[namespace][idKey];
+      touchMemoryMeta(namespace);
     }
 
     const db = await openDatabase();
@@ -350,25 +391,33 @@
 
     return new Promise(function (resolve) {
       try {
-        const tx = db.transaction([STORE_RECORDS], 'readwrite');
+        const tx = db.transaction([STORE_RECORDS, STORE_META], 'readwrite');
         const recordStore = tx.objectStore(STORE_RECORDS);
+        const metaStore = tx.objectStore(STORE_META);
         recordStore.delete(cacheKey);
+        metaStore.put({
+          namespace: namespace,
+          updatedAt: Date.now(),
+          count: window.__memoryCache.records[namespace]
+            ? Object.keys(window.__memoryCache.records[namespace]).length
+            : 0
+        });
 
         tx.oncomplete = function () {
           resolve(true);
         };
 
         tx.onerror = function () {
-          useMemoryFallback = true;
+          resetDatabaseConnection();
           resolve(true);
         };
 
         tx.onabort = function () {
-          useMemoryFallback = true;
+          resetDatabaseConnection();
           resolve(true);
         };
       } catch (_) {
-        useMemoryFallback = true;
+        resetDatabaseConnection();
         resolve(true);
       }
     });
@@ -401,9 +450,17 @@
     return task;
   }
 
+  async function revalidate(fetcherFn, onRevalidated) {
+    if (typeof fetcherFn !== 'function') {
+      return null;
+    }
+    const namespace = await resolveNamespace();
+    return triggerBackgroundRevalidate(namespace, fetcherFn, onRevalidated);
+  }
+
   async function getWithSWR(fetcherFn, options) {
     const opts = options || {};
-    const ttlMs = typeof opts.ttlMs === 'number' ? opts.ttlMs : DEFAULT_TTL_MS;
+    const ttlMs = typeof opts.ttlMs === 'number' && opts.ttlMs >= 0 ? opts.ttlMs : DEFAULT_TTL_MS;
     const forceRefresh = Boolean(opts.forceRefresh);
     const onRevalidated = typeof opts.onRevalidated === 'function' ? opts.onRevalidated : null;
     const namespace = await resolveNamespace();
@@ -472,9 +529,16 @@
         };
 
         tx.onerror = function () {
+          resetDatabaseConnection();
+          resolve(false);
+        };
+
+        tx.onabort = function () {
+          resetDatabaseConnection();
           resolve(false);
         };
       } catch (_) {
+        resetDatabaseConnection();
         resolve(false);
       }
     });
@@ -487,6 +551,7 @@
     setCachedActivities: setCachedActivities,
     upsertActivity: upsertActivity,
     removeActivity: removeActivity,
+    revalidate: revalidate,
     getWithSWR: getWithSWR,
     clearNamespace: clearNamespace
   });

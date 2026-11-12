@@ -3,8 +3,11 @@
   let activeClient = null;
   let activeChannel = null;
   let activeHandlers = null;
+  let savedClient = null;
+  let savedHandlers = null;
   let currentStatus = 'IDLE';
-  let teardownBound = false;
+  let lifecycleBound = false;
+  let subscriptionGeneration = 0;
   const latestTimestamps = Object.create(null);
 
   function isNewerOrEqualTimestamp(incomingTs, existingTs) {
@@ -17,6 +20,12 @@
       return true;
     }
     return incomingTime >= existingTime;
+  }
+
+  function notifyStatusChange(status) {
+    if (activeHandlers && typeof activeHandlers.onStatusChange === 'function') {
+      activeHandlers.onStatusChange(status);
+    }
   }
 
   function emitRealtimeEvent(detail) {
@@ -91,12 +100,20 @@
     }
   }
 
-  async function stop() {
+  async function teardown(preserveSessionConfig) {
+    subscriptionGeneration++;
     const client = activeClient;
     const channel = activeChannel;
+
     activeChannel = null;
-    activeHandlers = null;
+    activeClient = null;
     currentStatus = 'STOPPED';
+
+    if (!preserveSessionConfig) {
+      savedClient = null;
+      savedHandlers = null;
+      activeHandlers = null;
+    }
 
     if (client && channel && typeof client.removeChannel === 'function') {
       try {
@@ -104,16 +121,88 @@
       } catch (_) {
       }
     }
-    activeClient = null;
   }
 
-  function bindTeardownOnce() {
-    if (teardownBound) {
+  async function stop() {
+    await teardown(false);
+  }
+
+  function isChannelHealthy() {
+    if (!activeChannel || currentStatus !== 'SUBSCRIBED') {
+      return false;
+    }
+    if (typeof activeChannel.state === 'string' && activeChannel.state !== 'joined') {
+      return false;
+    }
+    return true;
+  }
+
+  function isChannelConnecting() {
+    if (currentStatus === 'SUBSCRIBING') {
+      return true;
+    }
+    if (activeChannel && activeChannel.state === 'joining') {
+      return true;
+    }
+    return false;
+  }
+
+  async function syncLifecycleState(reason) {
+    if (!savedClient) {
       return;
     }
-    teardownBound = true;
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      currentStatus = 'OFFLINE';
+      notifyStatusChange('OFFLINE');
+      return;
+    }
+
+    if (!isChannelHealthy() && !isChannelConnecting()) {
+      await start(savedClient, savedHandlers);
+    }
+
+    if (
+      savedHandlers &&
+      typeof savedHandlers.fetcher === 'function' &&
+      window.IdbCache &&
+      typeof window.IdbCache.revalidate === 'function'
+    ) {
+      window.IdbCache.revalidate(savedHandlers.fetcher, function (freshItems) {
+        if (Array.isArray(freshItems)) {
+          seedTimestamps(freshItems);
+        }
+        emitRealtimeEvent({
+          type: 'SYNC',
+          reason: reason
+        });
+      });
+    }
+  }
+
+  function bindLifecycleListenersOnce() {
+    if (lifecycleBound) {
+      return;
+    }
+    lifecycleBound = true;
+
     window.addEventListener('pagehide', function () {
-      stop();
+      teardown(true);
+    });
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') {
+        syncLifecycleState('visibilitychange');
+      }
+    });
+
+    window.addEventListener('online', function () {
+      syncLifecycleState('online');
+    });
+
+    window.addEventListener('offline', function () {
+      currentStatus = 'OFFLINE';
+      notifyStatusChange('OFFLINE');
     });
   }
 
@@ -124,15 +213,19 @@
       return null;
     }
 
-    await stop();
-    bindTeardownOnce();
+    await teardown(true);
+    bindLifecycleListenersOnce();
 
+    const generation = ++subscriptionGeneration;
     const schema = env && env.SUPABASE_SCHEMA ? env.SUPABASE_SCHEMA : 'pap';
-    const channelName = 'realtime:' + schema + ':' + TABLE_NAME + ':' + Date.now();
+    const channelName = 'realtime:' + schema + ':' + TABLE_NAME + ':' + Date.now() + ':' + generation;
 
+    savedClient = supabaseClient;
+    savedHandlers = handlers || null;
     activeClient = supabaseClient;
-    activeHandlers = handlers || null;
+    activeHandlers = savedHandlers;
     currentStatus = 'SUBSCRIBING';
+    notifyStatusChange(currentStatus);
 
     const channel = supabaseClient
       .channel(channelName)
@@ -144,14 +237,18 @@
           table: TABLE_NAME
         },
         function (payload) {
+          if (generation !== subscriptionGeneration) {
+            return;
+          }
           handlePostgresChange(payload);
         }
       )
       .subscribe(function (status) {
-        currentStatus = status || 'UNKNOWN';
-        if (activeHandlers && typeof activeHandlers.onStatusChange === 'function') {
-          activeHandlers.onStatusChange(currentStatus);
+        if (generation !== subscriptionGeneration) {
+          return;
         }
+        currentStatus = status || 'UNKNOWN';
+        notifyStatusChange(currentStatus);
       });
 
     activeChannel = channel;
