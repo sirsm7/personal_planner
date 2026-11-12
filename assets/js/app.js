@@ -16,6 +16,7 @@ const getMonthKey = function (d) {
 
 const btnShowLogin = document.getElementById('btn-show-login');
 const btnLogout = document.getElementById('btn-logout');
+const btnConnectionProfile = document.getElementById('btn-connection-profile');
 const tabAddBtn = document.getElementById('tab-add-btn');
 const tabMigrationBtn = document.getElementById('tab-migration-btn');
 
@@ -23,13 +24,17 @@ function updateAuthUI() {
   if (currentUser) {
     if (btnShowLogin) btnShowLogin.classList.add('hidden');
     if (btnLogout) btnLogout.classList.remove('hidden');
+    if (btnConnectionProfile) btnConnectionProfile.classList.remove('hidden');
     if (tabAddBtn) tabAddBtn.classList.remove('hidden');
     if (tabMigrationBtn) tabMigrationBtn.classList.remove('hidden');
   } else {
     if (btnShowLogin) btnShowLogin.classList.remove('hidden');
     if (btnLogout) btnLogout.classList.add('hidden');
+    if (btnConnectionProfile) btnConnectionProfile.classList.add('hidden');
     if (tabAddBtn) tabAddBtn.classList.add('hidden');
     if (tabMigrationBtn) tabMigrationBtn.classList.add('hidden');
+
+    window.closeConnectionModal();
 
     const tabAdd = document.getElementById('tab-add');
     const tabMigration = document.getElementById('tab-migration');
@@ -220,7 +225,7 @@ function updateMonthOptions() {
 
   const currentVal = filterMonth;
   monthSelect.innerHTML = '';
-  
+
   const defaultOpt = document.createElement('option');
   defaultOpt.value = '__ALL__';
   defaultOpt.textContent = 'Semua Bulan';
@@ -250,7 +255,7 @@ function updateMonthOptions() {
     }
     frag.appendChild(opt);
   });
-  
+
   monthSelect.appendChild(frag);
   updateDayOptions();
   if (currentVal !== '__ALL__') {
@@ -302,7 +307,7 @@ function updateDayOptions() {
     daySelect.appendChild(frag);
     daySelect.disabled = false;
   }
-  
+
   filterDay = '__ALL__';
   daySelect.value = '__ALL__';
 }
@@ -313,12 +318,12 @@ function linkifySafe(text) {
     span.textContent = '-';
     return span;
   }
-  
+
   const container = document.createDocumentFragment();
   const urlRegex = /(https?:\/\/[^\s<]+)/g;
   const parts = String(text).split(urlRegex);
-  
-  parts.forEach(function(part) {
+
+  parts.forEach(function (part) {
     if (/^https?:\/\//i.test(part)) {
       const anchor = document.createElement('a');
       anchor.href = part;
@@ -330,7 +335,7 @@ function linkifySafe(text) {
       container.appendChild(document.createTextNode(part));
     }
   });
-  
+
   return container;
 }
 
@@ -347,9 +352,9 @@ function createIcon(pathD) {
   svg.setAttribute('fill', 'none');
   svg.setAttribute('stroke', 'currentColor');
   svg.setAttribute('viewBox', '0 0 24 24');
-  
+
   const paths = Array.isArray(pathD) ? pathD : [pathD];
-  paths.forEach(function(d) {
+  paths.forEach(function (d) {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('stroke-linecap', 'round');
     path.setAttribute('stroke-linejoin', 'round');
@@ -406,12 +411,12 @@ function renderActivities() {
   Object.keys(groups).sort().reverse().forEach(function (key) {
     const items = groups[key];
     const dt = new Date(key + '-01');
-    const monthLabel = typeof msMY.format === 'function' 
-      ? msMY.format(dt) 
+    const monthLabel = typeof msMY.format === 'function'
+      ? msMY.format(dt)
       : dt.toLocaleDateString('ms-MY', { month: 'long' });
 
     const section = document.createElement('section');
-    
+
     const headerDiv = document.createElement('div');
     headerDiv.className = 'sticky top-16 bg-gray-50/95 backdrop-blur z-10 py-2 border-b border-gray-200 mb-4';
     const h3 = createTextElement('h3', 'text-lg font-bold text-gray-700 flex items-center gap-2', '');
@@ -428,36 +433,36 @@ function renderActivities() {
     items.forEach(function (act) {
       const isBimbingan = act.medium_aktiviti === 'Bimbingan';
       const badgeColor = isBimbingan ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
-      
+
       const card = document.createElement('div');
       card.className = 'bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200';
-      
+
       const metaRow = document.createElement('div');
       metaRow.className = 'flex justify-between items-start mb-2';
       metaRow.appendChild(createTextElement('span', 'px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide ' + badgeColor, act.medium_aktiviti));
-      
+
       const dtObj = new Date(act.tarikh);
       const formattedDate = dtObj.toLocaleDateString('ms-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
       metaRow.appendChild(createTextElement('span', 'text-xs font-mono text-gray-400', formattedDate));
       card.appendChild(metaRow);
-      
+
       card.appendChild(createTextElement('h4', 'text-lg font-bold text-gray-900 leading-snug mb-2 uppercase', act.tajuk || '(Tiada Tajuk)'));
-      
+
       const infoDiv = document.createElement('div');
       infoDiv.className = 'text-sm text-gray-600 space-y-1 mb-3';
-      
+
       const timeP = document.createElement('p');
       timeP.className = 'flex items-center gap-2 uppercase';
       timeP.appendChild(createIcon('M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'));
       timeP.appendChild(document.createTextNode(' ' + (act.masa || '-')));
       infoDiv.appendChild(timeP);
-      
+
       const placeP = document.createElement('p');
       placeP.className = 'flex items-center gap-2 uppercase';
       placeP.appendChild(createIcon(['M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z', 'M15 11a3 3 0 11-6 0 3 3 0 016 0z']));
       placeP.appendChild(document.createTextNode(' ' + (act.tempat || '-')));
       infoDiv.appendChild(placeP);
-      
+
       if (act.nama_guru) {
         const teacherP = document.createElement('p');
         teacherP.className = 'flex items-center gap-2 uppercase';
@@ -466,10 +471,10 @@ function renderActivities() {
         infoDiv.appendChild(teacherP);
       }
       card.appendChild(infoDiv);
-      
+
       const remarksDiv = document.createElement('div');
       remarksDiv.className = 'bg-gray-50 p-3 rounded-lg text-sm border border-gray-100';
-      
+
       const impakWrap = document.createElement('div');
       impakWrap.className = 'mb-2';
       impakWrap.appendChild(createTextElement('span', 'text-xs font-bold text-gray-400 uppercase', 'Impak / Catatan'));
@@ -479,7 +484,7 @@ function renderActivities() {
       impakContent.appendChild(linkifySafe(act.impak_catatan));
       impakWrap.appendChild(impakContent);
       remarksDiv.appendChild(impakWrap);
-      
+
       const susulWrap = document.createElement('div');
       susulWrap.appendChild(createTextElement('span', 'text-xs font-bold text-gray-400 uppercase', 'Tindak Susul'));
       const susulContent = document.createElement('div');
@@ -488,58 +493,58 @@ function renderActivities() {
       susulContent.appendChild(linkifySafe(act.tindak_susul));
       susulWrap.appendChild(susulContent);
       remarksDiv.appendChild(susulWrap);
-      
+
       card.appendChild(remarksDiv);
 
       if (currentUser) {
         const actionRow = document.createElement('div');
         actionRow.className = 'flex gap-2 mt-4 pt-3 border-t border-gray-100 no-print';
-        
+
         const btnEdit = createTextElement('button', 'flex-1 py-1.5 rounded text-sm text-blue-600 hover:bg-blue-50 font-medium transition', '✏️ Edit');
-        btnEdit.onclick = function() { window.openEditModal(act, false); };
-        
+        btnEdit.onclick = function () { window.openEditModal(act, false); };
+
         const btnCopy = createTextElement('button', 'flex-1 py-1.5 rounded text-sm text-purple-600 hover:bg-purple-50 font-medium transition', '📋 Salin');
-        btnCopy.onclick = function() { window.openEditModal(act, true); };
-        
+        btnCopy.onclick = function () { window.openEditModal(act, true); };
+
         const btnDel = createTextElement('button', 'flex-1 py-1.5 rounded text-sm text-red-600 hover:bg-red-50 font-medium transition', '🗑️ Padam');
-        btnDel.onclick = function() { window.deleteActivity(act.id); };
-        
+        btnDel.onclick = function () { window.deleteActivity(act.id); };
+
         actionRow.appendChild(btnEdit);
         actionRow.appendChild(btnCopy);
         actionRow.appendChild(btnDel);
         card.appendChild(actionRow);
       }
-      
+
       grid.appendChild(card);
     });
     section.appendChild(grid);
     frag.appendChild(section);
   });
-  
+
   listEl.appendChild(frag);
 }
 
 function createSummaryBox(type, total, isActive) {
   const isBimbingan = type === 'Bimbingan';
   const colorPrefix = isBimbingan ? 'green' : 'blue';
-  
+
   const box = document.createElement('div');
   box.className = 'summary-box cursor-pointer p-4 rounded-xl border transition-all duration-200 ';
-  box.className += isActive 
+  box.className += isActive
     ? 'ring-2 ring-' + colorPrefix + '-500 bg-' + colorPrefix + '-50 shadow-md'
     : 'bg-white border-' + colorPrefix + '-200 hover:shadow-sm';
-  box.onclick = function() { window.toggleTypeFilter(type); };
+  box.onclick = function () { window.toggleTypeFilter(type); };
 
   const topRow = document.createElement('div');
   topRow.className = 'flex justify-between items-start';
   topRow.appendChild(createTextElement('div', 'text-xs font-bold text-' + colorPrefix + '-600 uppercase tracking-wide', type));
-  
+
   if (isActive) {
     topRow.appendChild(createTextElement('span', 'text-' + colorPrefix + '-600 font-bold', '✓'));
   }
   box.appendChild(topRow);
   box.appendChild(createTextElement('div', 'text-3xl font-extrabold text-' + colorPrefix + '-800 mt-1', String(total)));
-  
+
   return box;
 }
 
@@ -547,10 +552,10 @@ function renderSummary(totalBim, totalAkt) {
   const boxEl = document.getElementById('summary-boxes');
   if (!boxEl) return;
   boxEl.innerHTML = '';
-  
+
   const isBimActive = filterType === 'Bimbingan';
   const isAktActive = filterType === 'Aktiviti';
-  
+
   boxEl.appendChild(createSummaryBox('Bimbingan', totalBim, isBimActive));
   boxEl.appendChild(createSummaryBox('Aktiviti', totalAkt, isAktActive));
 }
@@ -559,9 +564,9 @@ function renderHeatmap() {
   const grid = document.getElementById('heatmap-grid');
   const label = document.getElementById('heatmap-year-label');
   if (!grid) return;
-  
+
   if (label) label.textContent = filterYear;
-  
+
   const months = Array.from({ length: 12 }, function (_, i) {
     return {
       idx: i,
@@ -583,7 +588,7 @@ function renderHeatmap() {
   });
 
   let maxCount = 1;
-  months.forEach(function(m) {
+  months.forEach(function (m) {
     if (m.count > maxCount) maxCount = m.count;
   });
 
@@ -594,19 +599,19 @@ function renderHeatmap() {
     const opacity = m.count === 0 ? 0.05 : (m.count / maxCount);
     const bgColor = 'rgba(212, 175, 55, ' + Math.max(0.05, opacity) + ')';
     const borderColor = m.count > 0 ? 'border-yellow-400' : 'border-yellow-100';
-    
+
     const card = document.createElement('div');
     card.className = 'rounded-xl p-3 border ' + borderColor + ' transition-transform hover:scale-105';
     card.style.backgroundColor = bgColor;
-    
+
     card.appendChild(createTextElement('div', 'text-sm font-bold text-gray-800', m.name));
-    
+
     const countDiv = document.createElement('div');
     countDiv.className = 'text-xs text-gray-600 mt-1';
     countDiv.appendChild(document.createTextNode('Jumlah: '));
     countDiv.appendChild(createTextElement('b', '', String(m.count)));
     card.appendChild(countDiv);
-    
+
     const tagsDiv = document.createElement('div');
     tagsDiv.className = 'flex gap-1 mt-2 flex-wrap';
     if (m.count > 0) {
@@ -619,10 +624,6 @@ function renderHeatmap() {
 
   grid.appendChild(frag);
 }
-
-// -----------------------------------------------------------------
-// HANDLERS BORANG
-// -----------------------------------------------------------------
 
 const addForm = document.getElementById('add-activity-form');
 if (addForm) {
@@ -688,11 +689,7 @@ if (saveBtn) {
   });
 }
 
-// -----------------------------------------------------------------
-// FUNGSI MIGRATION (EKSPORT & IMPORT)
-// -----------------------------------------------------------------
-
-window.promptExportJson = async function() {
+window.promptExportJson = async function () {
   if (!currentUser) return window.Swal.fire('Akses Ditolak', 'Sila log masuk.', 'warning');
   try {
     const result = await window.DataMigration.exportJson(supabaseClient, allData);
@@ -702,7 +699,7 @@ window.promptExportJson = async function() {
   }
 };
 
-window.promptExportCsv = async function() {
+window.promptExportCsv = async function () {
   if (!currentUser) return window.Swal.fire('Akses Ditolak', 'Sila log masuk.', 'warning');
   try {
     const result = await window.DataMigration.exportCsv(supabaseClient, allData);
@@ -712,7 +709,7 @@ window.promptExportCsv = async function() {
   }
 };
 
-window.handleImportSelection = async function(event) {
+window.handleImportSelection = async function (event) {
   if (!currentUser) return window.Swal.fire('Akses Ditolak', 'Sila log masuk.', 'warning');
   const file = event.target.files[0];
   if (!file) return;
@@ -720,7 +717,7 @@ window.handleImportSelection = async function(event) {
   try {
     const parsed = await window.DataMigration.parseImportFile(file);
     const summary = 'Rekod Sah: ' + parsed.validRecords.length + '\nDisingkirkan: ' + parsed.skippedCount;
-    
+
     const res = await window.Swal.fire({
       title: 'Sahkan Import',
       text: summary + '\n\nPilih mod import:',
@@ -734,21 +731,21 @@ window.handleImportSelection = async function(event) {
 
     if (res.isConfirmed || res.isDenied) {
       const preserveIds = res.isConfirmed;
-      let progressDialog = window.Swal.fire({
+      window.Swal.fire({
         title: 'Mengimport Data...',
         html: 'Sila tunggu. Jangan tutup halaman ini.',
         allowOutsideClick: false,
-        didOpen: () => { window.Swal.showLoading(); }
+        didOpen: function () { window.Swal.showLoading(); }
       });
 
       const result = await window.DataMigration.importRecords(supabaseClient, parsed.validRecords, {
         preserveIds: preserveIds,
-        onProgress: function(p) { }
+        onProgress: function () { }
       });
 
       await loadInitialData();
       refreshDataSilently();
-      
+
       window.Swal.fire('Berjaya', 'Import selesai (' + result.importedCount + ' rekod).', 'success');
     }
   } catch (err) {
@@ -789,10 +786,6 @@ if (btnShowLogin) {
   });
 }
 
-// -----------------------------------------------------------------
-// WINDOW EXPORTS
-// -----------------------------------------------------------------
-
 window.switchTab = function (tab) {
   document.querySelectorAll('.tab-content').forEach(function (el) { el.classList.remove('active'); });
   document.querySelectorAll('.tab-button').forEach(function (el) { el.classList.remove('active'); });
@@ -817,6 +810,12 @@ window.closeLoginModal = function () {
 };
 
 window.openConnectionModal = function () {
+  if (!currentUser) {
+    if (window.Swal) {
+      window.Swal.fire('Akses Ditolak', 'Sila log masuk sebagai admin terlebih dahulu.', 'warning');
+    }
+    return;
+  }
   const modal = document.getElementById('connection-modal');
   if (!modal) return;
   const currentEnv = window.__ENV || {};
@@ -832,12 +831,18 @@ window.closeConnectionModal = function () {
 };
 
 window.saveConnectionOverride = function () {
+  if (!currentUser) {
+    if (window.Swal) {
+      window.Swal.fire('Akses Ditolak', 'Sila log masuk sebagai admin terlebih dahulu.', 'warning');
+    }
+    return;
+  }
   const url = document.getElementById('override-url').value;
   const key = document.getElementById('override-key').value;
   const schema = document.getElementById('override-schema').value;
   try {
     window.AppConfig.setOverride({ SUPABASE_URL: url, SUPABASE_ANON_KEY: key, SUPABASE_SCHEMA: schema });
-    window.Swal.fire('Berjaya', 'Profil sambungan telah ditukar. Memuat semula...', 'success').then(function() {
+    window.Swal.fire('Berjaya', 'Profil sambungan telah ditukar. Memuat semula...', 'success').then(function () {
       window.location.reload();
     });
   } catch (err) {
@@ -846,8 +851,14 @@ window.saveConnectionOverride = function () {
 };
 
 window.clearConnectionOverride = function () {
+  if (!currentUser) {
+    if (window.Swal) {
+      window.Swal.fire('Akses Ditolak', 'Sila log masuk sebagai admin terlebih dahulu.', 'warning');
+    }
+    return;
+  }
   window.AppConfig.clearOverride();
-  window.Swal.fire('Ditetapkan Semula', 'Kembali ke konfigurasi asal. Memuat semula...', 'info').then(function() {
+  window.Swal.fire('Ditetapkan Semula', 'Kembali ke konfigurasi asal. Memuat semula...', 'info').then(function () {
     window.location.reload();
   });
 };
@@ -857,7 +868,7 @@ window.isCopyMode = false;
 window.openEditModal = function (item, copyMode) {
   let parsedItem = item;
   if (typeof item === 'string') {
-    try { parsedItem = JSON.parse(item); } catch (e) { }
+    try { parsedItem = JSON.parse(item); } catch (_) { }
   }
 
   window.isCopyMode = copyMode;
@@ -916,7 +927,7 @@ function safeUpperCase(text) {
   if (!text) return '';
   const urlRegex = /(https?:\/\/[^\s<]+)/gi;
   const parts = String(text).split(urlRegex);
-  return parts.map(function(part) {
+  return parts.map(function (part) {
     if (/^https?:\/\//i.test(part)) {
       return part;
     }
